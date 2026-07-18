@@ -1,5 +1,6 @@
 <html>
     <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>ログイン - 夏休み課題管理アプリ</title>
         <style>
             body {
@@ -10,6 +11,8 @@
                 align-items: center;
                 height: 100vh;
                 margin: 0;
+                padding: 10px; /* スマホの端っこにピッタリくっつかないように隙間を追加 */
+                box-sizing: border-box;
             }
             .login-box {
                 background: white;
@@ -17,7 +20,9 @@
                 border-radius: 8px;
                 box-shadow: 0 4px 15px rgba(0,0,0,0.1);
                 text-align: center;
-                width: 350px;
+                width: 100%;       /* スマホの画面幅に合わせる */
+                max-width: 350px;  /* パソコンで見ても大きくなりすぎない限界値 */
+                box-sizing: border-box; /* パディングを含めたサイズ計算にする */
             }
             h1 {
                 color: #2c3e50;
