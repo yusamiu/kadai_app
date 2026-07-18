@@ -1,103 +1,111 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from datetime import datetime
 import os
+import psycopg2
+from psycopg2.extras import DictCursor
 
 app = Flask(__name__)
-# ログイン状態を管理するための秘密の鍵
 app.secret_key = 'yusaku_secret_key_12345'
 
-# データの保存先ファイル名
-TASK_FILE = "tasks.txt"
-OPINION_FILE = "opinions.txt"
+# --------------------------------------------------
+# 🔑 Renderの金庫（データベース）に接続する関数
+# --------------------------------------------------
+def get_db_connection():
+    # Renderの環境変数（後で設定します）から金庫のURLを読み込む
+    database_url = os.environ.get('DATABASE_URL')
+    conn = psycopg2.connect(database_url, sslmode='require')
+    return conn
 
 # --------------------------------------------------
-# 📝 便利な関数（ファイルからデータを読み書きする）
+# 🏗️ アプリ起動時に、金庫の中に「引き出し（テーブル）」を作る
 # --------------------------------------------------
-def load_tasks():
-    """ファイルからすべての課題を読み込む関数"""
-    if not os.path.exists(TASK_FILE):
-        return []
-    
-    tasks = []
-    with open(TASK_FILE, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            # データの分割 (ユーザー名, 課題名, 期限, 教科, 状態)
-            parts = line.split(",")
-            if len(parts) == 5:
-                username = parts[0].strip()
-                text = parts[1].strip()
-                deadline_str = parts[2].strip()
-                subject = parts[3].strip()
-                status = parts[4].strip()
-                
-                # あと何日かを計算する
-                try:
-                    deadline_date = datetime.strptime(deadline_str, '%Y-%m-%d')
-                    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-                    days_left = (deadline_date - today).days
-                except:
-                    days_left = 0
-                
-                tasks.append({
-                    'username': username,
-                    'text': text,
-                    'deadline': deadline_str,
-                    'subject': subject,
-                    'status': status,
-                    'days_left': days_left
-                })
-    return tasks
+def init_db():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    # 課題を入れる引き出し
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS tasks (
+            id SERIAL PRIMARY KEY,
+            username TEXT NOT NULL,
+            text TEXT NOT NULL,
+            deadline TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            status TEXT NOT NULL
+        );
+    ''')
+    # 意見を入れる引き出し
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS opinions (
+            id SERIAL PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            text TEXT NOT NULL
+        );
+    ''')
+    conn.commit()
+    cur.close()
+    conn.close()
 
-def save_tasks(tasks):
-    """すべての課題をファイルに書き込んで保存する関数"""
-    with open(TASK_FILE, "w", encoding="utf-8") as f:
-        for t in tasks:
-            f.write(f"{t['username']},{t['text']},{t['deadline']},{t['subject']},{t['status']}\n")
+# アプリ起動時に引き出しを自動作成
+init_db()
 
 # --------------------------------------------------
 # 🏠 画面のルート（部屋）の設定
 # --------------------------------------------------
 @app.route('/')
 def home():
-    """メイン画面を表示する部屋"""
-    # もしログインしていなければ、ログイン画面へ強制転送
     if 'username' not in session:
         return redirect(url_for('login_page'))
     
     current_user = session['username']
-    all_tasks = load_tasks()
     
-    # ログインしている「自分のデータだけ」を抜き出す（フィルター）
-    user_tasks = [t for t in all_tasks if t['username'] == current_user]
+    # 金庫から「自分の課題だけ」を期限が近い順に並び替えて持ってくる
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=DictCursor)
+    cur.execute(
+        "SELECT username, text, deadline, subject, status FROM tasks WHERE username = %s ORDER BY deadline ASC",
+        (current_user,)
+    )
+    db_tasks = cur.fetchall()
+    cur.close()
+    conn.close()
     
-    # 提出日が古い順（期限が近い順）に並び替える
-    user_tasks.sort(key=lambda x: x['deadline'])
+    user_tasks = []
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    for t in db_tasks:
+        try:
+            deadline_date = datetime.strptime(t['deadline'], '%Y-%m-%d')
+            days_left = (deadline_date - today).days
+        except:
+            days_left = 0
+            
+        user_tasks.append({
+            'username': t['username'],
+            'text': t['text'],
+            'deadline': t['deadline'],
+            'subject': t['subject'],
+            'status': t['status'],
+            'days_left': days_left
+        })
     
     return render_template('index.html', username=current_user, tasks=user_tasks)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login_page():
-    """ログイン画面の部屋"""
     if request.method == 'POST':
         username = request.form.get('username')
         if username:
-            # セッションに名前を記録してログイン状態にする
             session['username'] = username.strip()
             return redirect(url_for('home'))
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
-    """ログアウト処理をする部屋"""
     session.pop('username', None)
     return redirect(url_for('login_page'))
 
 @app.route('/add', methods=['POST'])
 def add_task():
-    """新しい課題を追加するアクション"""
     if 'username' not in session:
         return redirect(url_for('login_page'))
     
@@ -106,70 +114,77 @@ def add_task():
     subject = request.form.get('subject')
     
     if task_text and deadline and subject:
-        all_tasks = load_tasks()
-        # 新しい課題に「今のユーザー名」のラベルを貼って追加
-        all_tasks.append({
-            'username': session['username'],
-            'text': task_text,
-            'deadline': deadline,
-            'subject': subject,
-            'status': 'yet'
-        })
-        save_tasks(all_tasks)
+        # 金庫に新しい課題をガチャンと入れる
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO tasks (username, text, deadline, subject, status) VALUES (%s, %s, %s, %s, %s)",
+            (session['username'], task_text, deadline, subject, 'yet')
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
         
     return redirect(url_for('home'))
 
 @app.route('/complete', methods=['POST'])
 def complete_task():
-    """課題を完了状態にするアクション"""
     if 'username' not in session:
         return redirect(url_for('login_page'))
     
     task_value = request.form.get('task_value')
     task_deadline = request.form.get('task_deadline')
     
-    all_tasks = load_tasks()
-    for t in all_tasks:
-        # 自分の課題、かつ名前と期限が一致するものを「done」にする
-        if t['username'] == session['username'] and t['text'] == task_value and t['deadline'] == task_deadline:
-            t['status'] = 'done'
-            
-    save_tasks(all_tasks)
+    # 金庫のステータスを「done」に書き換える
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE tasks SET status = 'done' WHERE username = %s AND text = %s AND deadline = %s",
+        (session['username'], task_value, task_deadline)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
     return redirect(url_for('home'))
 
 @app.route('/delete', methods=['POST'])
 def delete_task():
-    """課題を完全に削除するアクション"""
     if 'username' not in session:
         return redirect(url_for('login_page'))
     
     task_value = request.form.get('task_value')
     task_deadline = request.form.get('task_deadline')
     
-    all_tasks = load_tasks()
-    # 削除対象以外のデータを残すことで削除を実現する
-    filtered_tasks = []
-    for t in all_tasks:
-        if t['username'] == session['username'] and t['text'] == task_value and t['deadline'] == task_deadline:
-            continue
-        filtered_tasks.append(t)
-        
-    save_tasks(filtered_tasks)
+    # 金庫からデータを完全に消去する
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM tasks WHERE username = %s AND text = %s AND deadline = %s",
+        (session['username'], task_value, task_deadline)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
     return redirect(url_for('home'))
 
 @app.route('/suggest', methods=['POST'])
 def suggest():
-    """意見箱からメッセージを受け取るアクション"""
     opinion_text = request.form.get('opinion')
     
     if opinion_text:
-        # 追記モード("a")で意見専用のノートに保存
-        with open(OPINION_FILE, "a", encoding="utf-8") as f:
-            now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
-            f.write(f"[{now_str}] {opinion_text.strip()}\n")
+        # 金庫の意見箱引き出しに保存する
+        conn = get_db_connection()
+        cur = conn.cursor()
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+        cur.execute(
+            "INSERT INTO opinions (created_at, text) VALUES (%s, %s)",
+            (now_str, opinion_text.strip())
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
             
     return redirect(url_for('home'))
 
 if __name__ == '__main__':
-    # アプリケーションを起動 (デバッグモードオン)
     app.run(debug=True)
