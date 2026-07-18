@@ -1,0 +1,62 @@
+<html>
+    <head>
+        <title>ログイン - 夏休み課題管理アプリ</title>
+        <style>
+            body {
+                background-color: #f4f7f6;
+                font-family: 'Helvetica Neue', Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+            }
+            .login-box {
+                background: white;
+                padding: 30px;
+                border-radius: 8px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                text-align: center;
+                width: 350px;
+            }
+            h1 {
+                color: #2c3e50;
+                font-size: 20px;
+                margin-bottom: 20px;
+            }
+            input[type="text"] {
+                width: 100%;
+                padding: 10px;
+                margin-bottom: 15px;
+                border: 2px solid #bdc3c7;
+                border-radius: 6px;
+                font-size: 16px;
+                box-sizing: border-box;
+            }
+            button {
+                background-color: #e67e22;
+                color: white;
+                border: none;
+                padding: 12px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: bold;
+                width: 100%;
+            }
+            button:hover {
+                background-color: #d35400;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="login-box">
+            <h1>夏休み課題管理アプリ</h1>
+            <p style="font-size: 14px; color: #666;">名前を入力してスタート</p>
+            <form action="/login" method="POST">
+                <input type="text" name="username" placeholder="あなたの名前（例: yusaku）" required>
+                <button type="submit">ログイン</button>
+            </form>
+        </div>
+    </body>
+</html>
