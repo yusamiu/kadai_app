@@ -215,13 +215,13 @@
                     gap: 10px;
                 }
                 .main-container {
-                    flex-direction: column; /* 左右並びを縦並びに変更！ */
+                    flex-direction: column;
                 }
                 input[type="date"] { width: 100%; margin-bottom: 8px; }
                 select { width: 100%; margin-bottom: 8px; }
                 .simple-calendar th, .simple-calendar td {
                     padding: 5px;
-                    font-size: 11px; /* カレンダーがはみ出さないように文字を少し小さく */
+                    font-size: 11px;
                 }
             }
         </style>
@@ -239,4 +239,99 @@
             <div class="left-column">
                 <div class="input-area">
                     <h2>新しい課題を追加する</h2>
-                    <form action="/add" method
+                    <form action="/add" method="POST">
+                        <input type="text" name="task" placeholder="課題名を入力" required>
+                        <input type="date" name="deadline" required>
+                        <select name="subject">
+                            <option value="国語">国語</option>
+                            <option value="数学">数学</option>
+                            <option value="英語">英語</option>
+                            <option value="理科">理科</option>
+                            <option value="社会">社会</option>
+                            <option value="その他">その他</option>
+                        </select>
+                        <button type="submit" class="submit-btn">課題を登録する</button>
+                    </form>
+                </div>
+
+                <div class="input-area" style="background: #ebf5fb; border-left: 5px solid #3498db; margin-top: 20px;">
+                    <h2 style="color: #2980b9; font-size: 16px;">📩 アプリの意見箱（任意）</h2>
+                    <p style="font-size: 12px; color: #555; margin-top: -5px;">「ここを直してほしい！」「こんな機能がほしい！」など自由に書いてね</p>
+                    <form action="/suggest" method="POST">
+                        <input type="text" name="opinion" placeholder="改善点や感想など（匿名で送れます）" required style="border-color: #a9cce3;">
+                        <button type="submit" class="submit-btn" style="background-color: #3498db;">意見を送信する</button>
+                    </form>
+                </div>
+
+                <h2>残っている課題一覧</h2>
+                <ul>
+                    {% for item in tasks %}
+                        {% if item.status == 'yet' %}
+                        <li>
+                            <div>
+                                <span class="badge">{{ item.subject }}</span>
+                                <strong>{{ item.text }}</strong>
+                                <span class="deadline-stamp">
+                                    提出日: {{ item.deadline }} 
+                                    {% if item.days_left <= 3 and item.days_left >= 0 %}
+                                        <span class="alert-text">（あと {{ item.days_left }} 日！大ピンチ）</span>
+                                    {% elif item.days_left < 0 %}
+                                        <span class="alert-text">（期限を {{ item.days_left | abs }} 日過ぎています！）</span>
+                                    {% else %}
+                                        <span>（あと {{ item.days_left }} 日）</span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <form action="/complete" method="POST" style="display:inline; margin:0;">
+                                <input type="hidden" name="task_value" value="{{ item.text }}">
+                                <input type="hidden" name="task_deadline" value="{{ item.deadline }}">
+                                <button type="submit">完了！</button>
+                            </form>
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div class="right-column">
+                <h2>提出日のスケジュール</h2>
+                <table class="simple-calendar">
+                    <thead>
+                        <tr>
+                            <th>提出日</th>
+                            <th>内容</th>
+                            <th>状態</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in tasks %}
+                        <tr>
+                            <td>{{ item.deadline }}</td>
+                            <td><span class="badge">{{ item.subject }}</span> <strong>{{ item.text }}</strong></td>
+                            <td>
+                                <div style="display: flex; align-items: center; justify-content: center;">
+                                    {% if item.status == 'done' %}
+                                        <span class="status-badge-done">完了</span>
+                                    {% else %}
+                                        <span class="status-badge-yet">未完了</span>
+                                    {% endif %}
+                                    
+                                    <form action="/delete" method="POST" style="display:inline; margin:0;">
+                                        <input type="hidden" name="task_value" value="{{ item.text }}">
+                                        <input type="hidden" name="task_deadline" value="{{ item.deadline }}">
+                                        <button type="submit" class="delete-btn">削除</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3" style="color: #999; padding: 20px;">登録された課題はありません</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </body>
+</html>
