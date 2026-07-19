@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>夏休みの課題管理</title>
     <style>
-        /* 🎨 全体を暖色系（ベージュ・ブラウン・オレンジ系）に調整 */
         body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fdf6ec; margin: 0; padding: 20px; color: #4a3728; }
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(212, 163, 115, 0.15); }
         h1 { text-align: center; color: #d4a373; margin-bottom: 5px; font-size: 24px; }
@@ -13,7 +12,27 @@
         .logout-link { color: #e76f51; text-decoration: none; margin-left: 10px; font-weight: bold; }
         form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px; background: #fefae0; padding: 15px; border-radius: 8px; border: 1px solid #e9edc9; }
         .form-row { display: flex; gap: 10px; }
-        input[type="text"], input[type="date"], select { flex: 1; padding: 10px; border: 1px solid #ccd5ae; border-radius: 6px; font-size: 14px; background: white; color: #4a3728; }
+        input[type="text"], input[type="date"], select { flex: 1; padding: 10px; border: 1px solid #ccd5ae; border-radius: 6px; font-size: 14px; background: white; color: #4a3728; min-width: 0; }
+        
+        /* 📅 スマホで日付入力欄が空のとき、分かりやすい文字を表示する魔法のCSS */
+        input[type="date"] {
+            position: relative;
+        }
+        input[type="date"]::before {
+            content: "📅 期限を選択";
+            position: absolute;
+            left: 10px;
+            color: #8c7865;
+            pointer-events: none;
+            width: 80%;
+            background: white;
+        }
+        /* 日付が入力されたら、上の「期限を選択」という文字を消す設定 */
+        input[type="date"]:focus::before,
+        input[type="date"]:valid::before {
+            display: none;
+        }
+
         button.add-btn { background: #d4a373; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
         button.add-btn:hover { background: #c69465; }
         .task-list { list-style: none; padding: 0; margin: 0; }
@@ -32,10 +51,8 @@
         .comp-btn { background: #52b788; color: white; }
         .del-btn { background: #e76f51; color: white; }
         
-        /* 📩 意見箱セクションのサイズを縮小 */
         .opinion-section { margin-top: 30px; border-top: 2px dashed #e9edc9; padding-top: 20px; }
         .opinion-section h3 { font-size: 14px; color: #8c7865; margin-bottom: 8px; }
-        /* 高さを 70px → 38px にして1行〜2行のコンパクトサイズに */
         .opinion-section textarea { width: 100%; box-sizing: border-box; height: 38px; padding: 8px; border: 1px solid #ccd5ae; border-radius: 6px; font-size: 12px; resize: none; margin-bottom: 6px; }
         .opinion-submit { background: #8c7865; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; width: fit-content; align-self: flex-end; }
         .opinion-submit:hover { background: #73604e; }
