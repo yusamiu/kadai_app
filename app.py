@@ -11,7 +11,7 @@ app.secret_key = 'yusaku_secret_key_12345'
 # 🔑 Renderの金庫（データベース）に接続する関数
 # --------------------------------------------------
 def get_db_connection():
-    # Renderの環境変数（後で設定します）から金庫のURLを読み込む
+    # Renderの環境変数から金庫のURLを読み込む
     database_url = os.environ.get('DATABASE_URL')
     conn = psycopg2.connect(database_url, sslmode='require')
     return conn
@@ -186,5 +186,81 @@ def suggest():
             
     return redirect(url_for('home'))
 
+# --------------------------------------------------
+# 🔐 管理者用の隠しページ（ユーザー一覧＆意見箱の確認）
+# --------------------------------------------------
+@app.route('/admin-yusaku-xyz777')
+def admin_page():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # 1. これまでに登録された重複のないユーザー名を取得
+    cur.execute("SELECT DISTINCT username FROM tasks ORDER BY username;")
+    users = [row[0] for row in cur.fetchall()]
+    
+    # 2. 意見箱（opinionsテーブル）から届いた意見を新しい順に取得
+    opinions = []
+    try:
+        cur.execute("SELECT text, created_at FROM opinions ORDER BY id DESC;")
+        opinions = cur.fetchall()
+    except Exception:
+        conn.rollback()
+    
+    cur.close()
+    conn.close()
+    
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>管理者専用ページ</title>
+        <style>
+            body { font-family: Arial, sans-serif; background: #f4f7f6; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; }
+            h1 { color: #2c3e50; border-bottom: 2px solid #2c3e50; padding-bottom: 10px; font-size: 20px; }
+            h2 { font-size: 16px; color: #16a085; margin-top: 30px; }
+            ul { list-style: none; padding: 0; }
+            li { background: white; padding: 10px 15px; margin-bottom: 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 14px; }
+            .time { font-size: 11px; color: #7f8c8d; display: block; margin-top: 4px; }
+            .back-btn { display: inline-block; background: #7f8c8d; color: white; text-decoration: none; padding: 8px 12px; border-radius: 4px; font-size: 13px; margin-bottom: 20px; }
+        </style>
+    </head>
+    <body>
+        <a href="/" class="back-btn">← アプリに戻る</a>
+        <h1>📊 優作総帥の秘密の管理部屋</h1>
+        
+        <h2>👤 これまでにログインしたユーザー名 ({% len_users %})</h2>
+        <ul>
+            REPLACE_USER_LIST
+        </ul>
+        
+        <h2>📩 意見箱に届いたメッセージ ({% len_opinions %})</h2>
+        <ul>
+            REPLACE_OPINION_LIST
+        </ul>
+    </body>
+    </html>
+    """
+    
+    rendered = html_content.replace("{% len_users %}", str(len(users))).replace("{% len_opinions %}", str(len(opinions)))
+    
+    user_list_html = ""
+    for u in users:
+        user_list_html += f"<li><strong>{u}</strong> さん</li>"
+    if not users:
+        user_list_html = '<li style="color: #999;">まだ誰も登録していません</li>'
+    rendered = rendered.replace("REPLACE_USER_LIST", user_list_html)
+    
+    opinion_list_html = ""
+    for op in opinions:
+        opinion_list_html += f"<li><div>{op[0]}</div><span class='time'>受信日時: {op[1]}</span></li>"
+    if not opinions:
+        opinion_list_html = '<li style="color: #999;">まだ意見は届いていません</li>'
+    rendered = rendered.replace("REPLACE_OPINION_LIST", opinion_list_html)
+    
+    return rendered
+
+# 🚨 一番最後にアプリを起動する（ここがポイント！）
 if __name__ == '__main__':
     app.run(debug=True)
