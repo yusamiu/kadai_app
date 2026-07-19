@@ -1,67 +1,31 @@
-<html>
-    <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>ログイン - 夏休み課題管理アプリ</title>
-        <style>
-            body {
-                background-color: #f4f7f6;
-                font-family: 'Helvetica Neue', Arial, sans-serif;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                margin: 0;
-                padding: 10px; /* スマホの端っこにピッタリくっつかないように隙間を追加 */
-                box-sizing: border-box;
-            }
-            .login-box {
-                background: white;
-                padding: 30px;
-                border-radius: 8px;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-                text-align: center;
-                width: 100%;       /* スマホの画面幅に合わせる */
-                max-width: 350px;  /* パソコンで見ても大きくなりすぎない限界値 */
-                box-sizing: border-box; /* パディングを含めたサイズ計算にする */
-            }
-            h1 {
-                color: #2c3e50;
-                font-size: 20px;
-                margin-bottom: 20px;
-            }
-            input[type="text"] {
-                width: 100%;
-                padding: 10px;
-                margin-bottom: 15px;
-                border: 2px solid #bdc3c7;
-                border-radius: 6px;
-                font-size: 16px;
-                box-sizing: border-box;
-            }
-            button {
-                background-color: #e67e22;
-                color: white;
-                border: none;
-                padding: 12px;
-                border-radius: 6px;
-                cursor: pointer;
-                font-size: 16px;
-                font-weight: bold;
-                width: 100%;
-            }
-            button:hover {
-                background-color: #d35400;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="login-box">
-            <h1>夏休み課題管理アプリ</h1>
-            <p style="font-size: 14px; color: #666;">名前を入力してスタート</p>
-            <form action="/login" method="POST">
-                <input type="text" name="username" placeholder="あなたの名前（例: yusaku）" required>
-                <button type="submit">ログイン</button>
-            </form>
-        </div>
-    </body>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン - タスク管理アプリ</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fdf6ec; margin: 0; padding: 20px; color: #4a3728; display: flex; align-items: center; justify-content: center; min-height: 90vh; }
+        .login-container { max-width: 400px; width: 100%; background: white; padding: 40px 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(212, 163, 115, 0.15); box-sizing: border-box; }
+        h1 { text-align: center; color: #d4a373; margin-bottom: 30px; font-size: 24px; }
+        form { display: flex; flex-direction: column; gap: 20px; }
+        .input-group { display: flex; flex-direction: column; gap: 8px; }
+        label { font-size: 14px; font-weight: bold; color: #8c7865; }
+        input[type="text"] { padding: 12px; border: 1px solid #ccd5ae; border-radius: 6px; font-size: 16px; background: white; color: #4a3728; width: 100%; box-sizing: border-box; }
+        button.login-btn { background: #d4a373; color: white; border: none; padding: 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        button.login-btn:hover { background: #c69465; }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>タスク管理アプリ</h1>
+        <form action="/login" method="POST">
+            <div class="input-group">
+                <label for="username">名前を入力してスタート</label>
+                <input type="text" id="username" name="username" placeholder="例: 優作" required autocomplete="off">
+            </div>
+            <button type="submit" class="login-btn">ログイン</button>
+        </form>
+    </div>
+</body>
 </html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>タスク管理</title>
+    <title>タスク管理アプリ</title>
     <style>
         body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fdf6ec; margin: 0; padding: 20px; color: #4a3728; }
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(212, 163, 115, 0.15); }
@@ -13,6 +13,12 @@
         form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px; background: #fefae0; padding: 15px; border-radius: 8px; border: 1px solid #e9edc9; }
         .form-row { display: flex; gap: 10px; }
         input[type="text"], input[type="date"], select { flex: 1; padding: 10px; border: 1px solid #ccd5ae; border-radius: 6px; font-size: 14px; background: white; color: #4a3728; min-width: 0; }
+        
+        /* 💡 「その他」の入力枠用のスタイル（最初は非表示） */
+        .other-input-container {
+            display: none;
+            width: 100%;
+        }
         
         input[type="date"] {
             position: relative;
@@ -52,18 +58,18 @@
         .opinion-section { margin-top: 30px; border-top: 2px dashed #e9edc9; padding-top: 20px; }
         .opinion-section h3 { font-size: 14px; color: #8c7865; margin-bottom: 8px; }
         .opinion-section textarea { width: 100%; box-sizing: border-box; height: 38px; padding: 8px; border: 1px solid #ccd5ae; border-radius: 6px; font-size: 12px; resize: none; margin-bottom: 6px; }
-        .opinion-submit { background: #8c7865; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; width: fit-content; align-self: flex-end; }
+        .opinion-submit { background: #8c7865; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; width: fit-content; align-family: flex-end; }
         .opinion-submit:hover { background: #73604e; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>タスク管理</h1>
+        <h1>タスク管理アプリ</h1>
         <div class="user-welcome">ログイン中: <strong>{{ username }}</strong> さん <a href="/logout" class="logout-link">ログアウト</a></div>
         
-        <form action="/add" method="POST">
+        <form action="/add" method="POST" id="taskForm">
             <div class="form-row">
-                <select name="subject" required>
+                <select name="subject" id="subjectSelect" required onchange="toggleOtherInput()">
                     <option value="" disabled selected>分類を選択</option>
                     <option value="国語">国語</option>
                     <option value="数学">数学</option>
@@ -74,6 +80,11 @@
                 </select>
                 <input type="date" name="deadline" required>
             </div>
+            
+            <div class="other-input-container" id="otherInputContainer">
+                <input type="text" id="customSubject" placeholder="具体的な分類を入力（例: 買い物、自由研究）" autocomplete="off">
+            </div>
+
             <input type="text" name="task" placeholder="タスクの内容を入力してください..." required autocomplete="off">
             <button type="submit" class="add-btn">＋ タスクを登録する</button>
         </form>
@@ -125,5 +136,36 @@
             </form>
         </div>
     </div>
+
+    <script>
+        function toggleOtherInput() {
+            const select = document.getElementById('subjectSelect');
+            const container = document.getElementById('otherInputContainer');
+            const customInput = document.getElementById('customSubject');
+            
+            if (select.value === 'その他') {
+                container.style.display = 'block';
+                customInput.required = true;
+            } else {
+                container.style.display = 'none';
+                customInput.required = false;
+                customInput.value = '';
+            }
+        }
+
+        // 送信直前に、「その他」の自由入力文字をセレクトボックスの値として書き換えて金庫に送る処理
+        document.getElementById('taskForm').addEventListener('submit', function(e) {
+            const select = document.getElementById('subjectSelect');
+            const customInput = document.getElementById('customSubject');
+            
+            if (select.value === 'その他' && customInput.value.trim() !== '') {
+                // セレクトボックスに新しい選択肢を無理やり作って上書きする
+                const newOpt = document.createElement('option');
+                newOpt.value = customInput.value.trim();
+                newOpt.selected = true;
+                select.appendChild(newOpt);
+            }
+        });
+    </script>
 </body>
 </html>
