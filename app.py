@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session
-from datetime import datetime, timedelta  # 💡 timedelta を確実にインポート
+from datetime import datetime, timedelta
 import os
 import psycopg2
 from psycopg2.extras import DictCursor
@@ -51,7 +51,7 @@ def make_session_permanent():
     app.permanent_session_lifetime = timedelta(days=30)
 
 # --------------------------------------------------
-# 🏠 画面のルート（部屋）の設定
+# 🏠 メイン画面（ホーム部屋）
 # --------------------------------------------------
 @app.route('/')
 def home():
@@ -91,9 +91,12 @@ def home():
     
     return render_template('index.html', username=current_user, tasks=user_tasks)
 
+# --------------------------------------------------
+# 🔑 ログイン画面
+# --------------------------------------------------
 @app.route('/login', methods=['GET', 'POST'])
 def login_page():
-    # 💡 すでにログインしているなら、ログイン画面は見せずにホームへ飛ばす
+    # すでにログインしているなら、ログイン画面は見せずにホームへ飛ばす（自動ログイン）
     if 'username' in session:
         return redirect(url_for('home'))
 
@@ -104,11 +107,17 @@ def login_page():
             return redirect(url_for('home'))
     return render_template('login.html')
 
+# --------------------------------------------------
+# 🚪 ログアウト処理
+# --------------------------------------------------
 @app.route('/logout')
 def logout():
     session.pop('username', None)
     return redirect(url_for('login_page'))
 
+# --------------------------------------------------
+# ➕ 課題の追加
+# --------------------------------------------------
 @app.route('/add', methods=['POST'])
 def add_task():
     if 'username' not in session:
@@ -131,6 +140,9 @@ def add_task():
         
     return redirect(url_for('home'))
 
+# --------------------------------------------------
+# ✅ 課題の完了
+# --------------------------------------------------
 @app.route('/complete', methods=['POST'])
 def complete_task():
     if 'username' not in session:
@@ -150,6 +162,9 @@ def complete_task():
     conn.close()
     return redirect(url_for('home'))
 
+# --------------------------------------------------
+# ❌ 課題の削除
+# --------------------------------------------------
 @app.route('/delete', methods=['POST'])
 def delete_task():
     if 'username' not in session:
@@ -169,6 +184,9 @@ def delete_task():
     conn.close()
     return redirect(url_for('home'))
 
+# --------------------------------------------------
+# 📩 意見箱の送信
+# --------------------------------------------------
 @app.route('/suggest', methods=['POST'])
 def suggest():
     opinion_text = request.form.get('opinion')
