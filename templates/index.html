@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>夏休みの課題管理</title>
+    <title>タスク管理</title>
     <style>
         body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fdf6ec; margin: 0; padding: 20px; color: #4a3728; }
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(212, 163, 115, 0.15); }
@@ -14,7 +14,6 @@
         .form-row { display: flex; gap: 10px; }
         input[type="text"], input[type="date"], select { flex: 1; padding: 10px; border: 1px solid #ccd5ae; border-radius: 6px; font-size: 14px; background: white; color: #4a3728; min-width: 0; }
         
-        /* 📅 スマホで日付入力欄が空のとき、分かりやすい文字を表示する魔法のCSS */
         input[type="date"] {
             position: relative;
         }
@@ -27,7 +26,6 @@
             width: 80%;
             background: white;
         }
-        /* 日付が入力されたら、上の「期限を選択」という文字を消す設定 */
         input[type="date"]:focus::before,
         input[type="date"]:valid::before {
             display: none;
@@ -60,7 +58,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>夏休みの課題管理</h1>
+        <h1>タスク管理</h1>
         <div class="user-welcome">ログイン中: <strong>{{ username }}</strong> さん <a href="/logout" class="logout-link">ログアウト</a></div>
         
         <form action="/add" method="POST">
@@ -76,7 +74,7 @@
                 </select>
                 <input type="date" name="deadline" required>
             </div>
-            <input type="text" name="task" placeholder="課題の内容を入力してください..." required autocomplete="off">
+            <input type="text" name="task" placeholder="タスクの内容を入力してください..." required autocomplete="off">
             <button type="submit" class="add-btn">＋ 課題を登録する</button>
         </form>
 
@@ -115,7 +113,7 @@
                 </div>
             </li>
             {% else %}
-            <li style="text-align: center; color: #999; margin-top: 20px;">登録されている課題はありません。</li>
+            <li style="text-align: center; color: #999; margin-top: 20px;">登録されているタスクはありません。</li>
             {% endfor %}
         </ul>
         
