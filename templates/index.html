@@ -5,36 +5,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>夏休みの課題管理</title>
     <style>
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        h1 { text-align: center; color: #1e3c72; margin-bottom: 5px; font-size: 24px; }
-        .user-welcome { text-align: center; color: #666; font-size: 14px; margin-bottom: 25px; }
-        .logout-link { color: #ff4d4d; text-decoration: none; margin-left: 10px; font-weight: bold; }
-        form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; }
+        /* 🎨 全体を暖色系（ベージュ・ブラウン・オレンジ系）に調整 */
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fdf6ec; margin: 0; padding: 20px; color: #4a3728; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(212, 163, 115, 0.15); }
+        h1 { text-align: center; color: #d4a373; margin-bottom: 5px; font-size: 24px; }
+        .user-welcome { text-align: center; color: #8c7865; font-size: 14px; margin-bottom: 25px; }
+        .logout-link { color: #e76f51; text-decoration: none; margin-left: 10px; font-weight: bold; }
+        form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px; background: #fefae0; padding: 15px; border-radius: 8px; border: 1px solid #e9edc9; }
         .form-row { display: flex; gap: 10px; }
-        input[type="text"], input[type="date"], select { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
-        button.add-btn { background: #1e3c72; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
-        button.add-btn:hover { background: #2a5298; }
+        input[type="text"], input[type="date"], select { flex: 1; padding: 10px; border: 1px solid #ccd5ae; border-radius: 6px; font-size: 14px; background: white; color: #4a3728; }
+        button.add-btn { background: #d4a373; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        button.add-btn:hover { background: #c69465; }
         .task-list { list-style: none; padding: 0; margin: 0; }
-        .task-item { display: flex; flex-direction: column; background: white; padding: 15px; margin-bottom: 12px; border-radius: 8px; border-left: 5px solid #1e3c72; box-shadow: 0 2px 5px rgba(0,0,0,0.03); position: relative; }
-        .task-item.done { border-left-color: #28a745; background: #fafafa; }
-        .task-item.done .task-text { text-decoration: line-through; color: #aaa; }
+        .task-item { display: flex; flex-direction: column; background: white; padding: 15px; margin-bottom: 12px; border-radius: 8px; border-left: 5px solid #d4a373; box-shadow: 0 2px 5px rgba(0,0,0,0.03); position: relative; }
+        .task-item.done { border-left-color: #52b788; background: #fafafa; }
+        .task-item.done .task-text { text-decoration: line-through; color: #b7b7b7; }
         .task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-        .subject-tag { background: #e2e8f0; color: #4a5568; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        .subject-tag { background: #faedcd; color: #604d3b; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
         .task-text { font-size: 16px; font-weight: 500; margin: 5px 0; word-break: break-all; }
-        .task-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; font-size: 12px; color: #666; }
+        .task-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; font-size: 12px; color: #8c7865; }
         .days-left { font-weight: bold; padding: 2px 6px; border-radius: 4px; }
-        .days-urgent { background: #ffe3e3; color: #d63031; }
-        .days-normal { background: #e3f2fd; color: #0d47a1; }
+        .days-urgent { background: #f8d7da; color: #721c24; }
+        .days-normal { background: #fefae0; color: #d4a373; }
         .action-btns { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
         .action-btns button { padding: 6px 12px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: bold; }
-        .comp-btn { background: #28a745; color: white; }
-        .del-btn { background: #dc3545; color: white; }
+        .comp-btn { background: #52b788; color: white; }
+        .del-btn { background: #e76f51; color: white; }
         
-        .opinion-section { margin-top: 40px; border-top: 2px dashed #ddd; padding-top: 25px; }
-        .opinion-section h3 { font-size: 16px; color: #444; margin-bottom: 10px; }
-        .opinion-section textarea { width: 100%; box-sizing: border-box; height: 70px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; resize: none; margin-bottom: 8px; }
-        .opinion-submit { background: #555; color: white; border: none; padding: 8px 15px; border-radius: 4px; font-size: 12px; cursor: pointer; width: fit-content; align-self: flex-end; }
+        /* 📩 意見箱セクションのサイズを縮小 */
+        .opinion-section { margin-top: 30px; border-top: 2px dashed #e9edc9; padding-top: 20px; }
+        .opinion-section h3 { font-size: 14px; color: #8c7865; margin-bottom: 8px; }
+        /* 高さを 70px → 38px にして1行〜2行のコンパクトサイズに */
+        .opinion-section textarea { width: 100%; box-sizing: border-box; height: 38px; padding: 8px; border: 1px solid #ccd5ae; border-radius: 6px; font-size: 12px; resize: none; margin-bottom: 6px; }
+        .opinion-submit { background: #8c7865; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; width: fit-content; align-self: flex-end; }
+        .opinion-submit:hover { background: #73604e; }
     </style>
 </head>
 <body>
@@ -101,7 +105,7 @@
         <div class="opinion-section">
             <h3>📩 開発者（優作）への意見箱</h3>
             <form action="/suggest" method="POST" style="background:none; border:none; padding:0; margin:0;">
-                <textarea name="opinion" placeholder="アプリへの要望やバグ報告、応援メッセージなど何でもどうぞ！匿名で届きます。" required></textarea>
+                <textarea name="opinion" placeholder="アプリへの要望やバグ報告など何でもどうぞ！" required></textarea>
                 <button type="submit" class="opinion-submit">送信する</button>
             </form>
         </div>
