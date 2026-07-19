@@ -1,337 +1,110 @@
 <!DOCTYPE html>
-<html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>夏休み課題管理アプリ</title>
-        <style>
-            body {
-                background-color: #f4f7f6;
-                font-family: 'Helvetica Neue', Arial, sans-serif;
-                max-width: 950px;
-                margin: 30px auto;
-                padding: 0 20px;
-                color: #333;
-            }
-            
-            /* ヘッダー周りのデザイン */
-            .header-area {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                border-bottom: 3px solid #e67e22;
-                padding-bottom: 10px;
-                margin-bottom: 20px;
-            }
-            h1 {
-                color: #2c3e50;
-                margin: 0;
-                font-size: 24px;
-            }
-            .user-info {
-                font-size: 14px;
-            }
-            .logout-btn {
-                background-color: #7f8c8d;
-                color: white;
-                text-decoration: none;
-                padding: 5px 10px;
-                border-radius: 4px;
-                font-size: 12px;
-                margin-left: 10px;
-            }
-            .logout-btn:hover { background-color: #95a5a6; }
-
-            .main-container {
-                display: flex;
-                gap: 20px;
-            }
-
-            .left-column {
-                flex: 1.1;
-                width: 100%;
-            }
-
-            .right-column {
-                flex: 1.3;
-                background: white;
-                padding: 15px;
-                border-radius: 8px;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-                height: fit-content;
-                width: 100%;
-                box-sizing: border-box;
-            }
-
-            .input-area {
-                background: white;
-                padding: 15px;
-                border-radius: 8px;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-                margin-bottom: 20px;
-            }
-
-            h2 {
-                font-size: 18px;
-                margin-top: 0;
-                color: #34495e;
-            }
-
-            input[type="text"], input[type="date"], select {
-                padding: 8px;
-                margin-bottom: 8px;
-                border: 2px solid #bdc3c7;
-                border-radius: 6px;
-                font-size: 14px;
-                box-sizing: border-box;
-            }
-
-            input[type="text"] { width: 100%; }
-            input[type="date"] { width: 55%; }
-            select { width: 40%; background-color: white; }
-
-            .submit-btn {
-                background-color: #e67e22;
-                color: white;
-                border: none;
-                padding: 10px 15px;
-                border-radius: 6px;
-                cursor: pointer;
-                font-size: 14px;
-                font-weight: bold;
-                width: 100%;
-            }
-            .submit-btn:hover { background-color: #d35400; }
-
-            ul { list-style: none; padding: 0; }
-
-            li {
-                background: white;
-                padding: 12px;
-                margin-bottom: 8px;
-                border-radius: 6px;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                font-size: 14px;
-                gap: 10px;
-            }
-
-            .deadline-stamp {
-                font-size: 12px;
-                color: #7f8c8d;
-                display: block;
-                margin-top: 4px;
-            }
-
-            .alert-text {
-                color: #e74c3c;
-                font-weight: bold;
-            }
-
-            .badge {
-                display: inline-block;
-                padding: 2px 6px;
-                font-size: 10px;
-                font-weight: bold;
-                color: white;
-                background-color: #34495e;
-                border-radius: 4px;
-                margin-right: 5px;
-            }
-
-            .status-badge-done {
-                background-color: #2ecc71;
-                color: white;
-                padding: 2px 6px;
-                font-size: 10px;
-                font-weight: bold;
-                border-radius: 4px;
-            }
-
-            .status-badge-yet {
-                background-color: #e74c3c;
-                color: white;
-                padding: 2px 6px;
-                font-size: 10px;
-                font-weight: bold;
-                border-radius: 4px;
-            }
-
-            li button {
-                background-color: #2ecc71;
-                color: white;
-                border: none;
-                padding: 4px 8px;
-                font-size: 11px;
-                width: auto;
-                border-radius: 4px;
-                white-space: nowrap;
-            }
-            li button:hover { background-color: #27ae60; }
-
-            .simple-calendar {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 10px;
-            }
-
-            .simple-calendar th, .simple-calendar td {
-                border: 1px solid #ddd;
-                text-align: center;
-                padding: 8px;
-                font-size: 13px;
-            }
-
-            .simple-calendar th {
-                background-color: #f2f2f2;
-                font-weight: bold;
-            }
-
-            .delete-btn {
-                background-color: #e74c3c;
-                color: white;
-                border: none;
-                padding: 3px 6px;
-                font-size: 10px;
-                border-radius: 4px;
-                cursor: pointer;
-                margin-left: 5px;
-                font-weight: normal;
-                width: auto;
-            }
-            .delete-btn:hover { background-color: #c0392b; }
-
-            /* 📱 スマホ用の配置設定（画面幅が768px以下のとき） */
-            @media (max-width: 768px) {
-                body {
-                    margin: 10px auto;
-                    padding: 0 10px;
-                }
-                .header-area {
-                    flex-direction: column;
-                    align-items: flex-start;
-                    gap: 10px;
-                }
-                .main-container {
-                    flex-direction: column;
-                }
-                input[type="date"] { width: 100%; margin-bottom: 8px; }
-                select { width: 100%; margin-bottom: 8px; }
-                .simple-calendar th, .simple-calendar td {
-                    padding: 5px;
-                    font-size: 11px;
-                }
-            }
-        </style>
-    </head>
-    <body>
-        <div class="header-area">
-            <h1>夏休み課題管理アプリ</h1>
-            <div class="user-info">
-                ログイン中: <strong>{{ username }}</strong> さん
-                <a href="/logout" class="logout-btn">ログアウト</a>
-            </div>
-        </div>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>優作の最強タスク管理</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h1 { text-align: center; color: #1e3c72; margin-bottom: 5px; font-size: 24px; }
+        .user-welcome { text-align: center; color: #666; font-size: 14px; margin-bottom: 25px; }
+        .logout-link { color: #ff4d4d; text-decoration: none; margin-left: 10px; font-weight: bold; }
+        form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; }
+        .form-row { display: flex; gap: 10px; }
+        input[type="text"], input[type="date"], select { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+        button.add-btn { background: #1e3c72; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        button.add-btn:hover { background: #2a5298; }
+        .task-list { list-style: none; padding: 0; margin: 0; }
+        .task-item { display: flex; flex-direction: column; background: white; padding: 15px; margin-bottom: 12px; border-radius: 8px; border-left: 5px solid #1e3c72; box-shadow: 0 2px 5px rgba(0,0,0,0.03); position: relative; }
+        .task-item.done { border-left-color: #28a745; background: #fafafa; }
+        .task-item.done .task-text { text-decoration: line-through; color: #aaa; }
+        .task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .subject-tag { background: #e2e8f0; color: #4a5568; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        .task-text { font-size: 16px; font-weight: 500; margin: 5px 0; word-break: break-all; }
+        .task-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; font-size: 12px; color: #666; }
+        .days-left { font-weight: bold; padding: 2px 6px; border-radius: 4px; }
+        .days-urgent { background: #ffe3e3; color: #d63031; }
+        .days-normal { background: #e3f2fd; color: #0d47a1; }
+        .action-btns { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
+        .action-btns button { padding: 6px 12px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: bold; }
+        .comp-btn { background: #28a745; color: white; }
+        .del-btn { background: #dc3545; color: white; }
         
-        <div class="main-container">
-            <div class="left-column">
-                <div class="input-area">
-                    <h2>新しい課題を追加する</h2>
-                    <form action="/add" method="POST">
-                        <input type="text" name="task" placeholder="課題名を入力" required>
-                        <input type="date" name="deadline" required>
-                        <select name="subject">
-                            <option value="国語">国語</option>
-                            <option value="数学">数学</option>
-                            <option value="英語">英語</option>
-                            <option value="理科">理科</option>
-                            <option value="社会">社会</option>
-                            <option value="その他">その他</option>
-                        </select>
-                        <button type="submit" class="submit-btn">課題を登録する</button>
-                    </form>
-                </div>
-
-                <div class="input-area" style="background: #ebf5fb; border-left: 5px solid #3498db; margin-top: 20px;">
-                    <h2 style="color: #2980b9; font-size: 16px;">📩 アプリの意見箱（任意）</h2>
-                    <p style="font-size: 12px; color: #555; margin-top: -5px;">「ここを直してほしい！」「こんな機能がほしい！」など自由に書いてね</p>
-                    <form action="/suggest" method="POST">
-                        <input type="text" name="opinion" placeholder="改善点や感想など（匿名で送れます）" required style="border-color: #a9cce3;">
-                        <button type="submit" class="submit-btn" style="background-color: #3498db;">意見を送信する</button>
-                    </form>
-                </div>
-
-                <h2>残っている課題一覧</h2>
-                <ul>
-                    {% for item in tasks %}
-                        {% if item.status == 'yet' %}
-                        <li>
-                            <div>
-                                <span class="badge">{{ item.subject }}</span>
-                                <strong>{{ item.text }}</strong>
-                                <span class="deadline-stamp">
-                                    提出日: {{ item.deadline }} 
-                                    {% if item.days_left <= 3 and item.days_left >= 0 %}
-                                        <span class="alert-text">（あと {{ item.days_left }} 日！大ピンチ）</span>
-                                    {% elif item.days_left < 0 %}
-                                        <span class="alert-text">（期限を {{ item.days_left | abs }} 日過ぎています！）</span>
-                                    {% else %}
-                                        <span>（あと {{ item.days_left }} 日）</span>
-                                    {% endif %}
-                                </span>
-                            </div>
-                            <form action="/complete" method="POST" style="display:inline; margin:0;">
-                                <input type="hidden" name="task_value" value="{{ item.text }}">
-                                <input type="hidden" name="task_deadline" value="{{ item.deadline }}">
-                                <button type="submit">完了！</button>
-                            </form>
-                        </li>
-                        {% endif %}
-                    {% endfor %}
-                </ul>
+        .opinion-section { margin-top: 40px; border-top: 2px dashed #ddd; padding-top: 25px; }
+        .opinion-section h3 { font-size: 16px; color: #444; margin-bottom: 10px; }
+        .opinion-section textarea { width: 100%; box-sizing: border-box; height: 70px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; resize: none; margin-bottom: 8px; }
+        .opinion-submit { background: #555; color: white; border: none; padding: 8px 15px; border-radius: 4px; font-size: 12px; cursor: pointer; width: fit-content; align-self: flex-end; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>優作の最強タスク管理</h1>
+        <div class="user-welcome">ログイン中: <strong>{{ username }}</strong> さん <a href="/logout" class="logout-link">ログアウト</a></div>
+        
+        <form action="/add" method="POST">
+            <div class="form-row">
+                <select name="subject" required>
+                    <option value="" disabled selected>教科を選択</option>
+                    <option value="国語">国語</option>
+                    <option value="数学">数学</option>
+                    <option value="英語">英語</option>
+                    <option value="理科">理科</option>
+                    <option value="社会">社会</option>
+                    <option value="その他">その他</option>
+                </select>
+                <input type="date" name="deadline" required>
             </div>
+            <input type="text" name="task" placeholder="課題の内容を入力してください..." required autocomplete="off">
+            <button type="submit" class="add-btn">＋ 課題を金庫に登録する</button>
+        </form>
 
-            <div class="right-column">
-                <h2>提出日のスケジュール</h2>
-                <table class="simple-calendar">
-                    <thead>
-                        <tr>
-                            <th>提出日</th>
-                            <th>内容</th>
-                            <th>状態</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in tasks %}
-                        <tr>
-                            <td>{{ item.deadline }}</td>
-                            <td><span class="badge">{{ item.subject }}</span> <strong>{{ item.text }}</strong></td>
-                            <td>
-                                <div style="display: flex; align-items: center; justify-content: center;">
-                                    {% if item.status == 'done' %}
-                                        <span class="status-badge-done">完了</span>
-                                    {% else %}
-                                        <span class="status-badge-yet">未完了</span>
-                                    {% endif %}
-                                    
-                                    <form action="/delete" method="POST" style="display:inline; margin:0;">
-                                        <input type="hidden" name="task_value" value="{{ item.text }}">
-                                        <input type="hidden" name="task_deadline" value="{{ item.deadline }}">
-                                        <button type="submit" class="delete-btn">削除</button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
+        <ul class="task-list">
+            {% for task in tasks %}
+            <li class="task-item {% if task.status == 'done' %}done{% endif %}">
+                <div class="task-header">
+                    <span class="subject-tag">{{ task.subject }}</span>
+                    {% if task.status != 'done' %}
+                        {% if task.days_left <= 1 %}
+                            <span class="days-left days-urgent">期限まであと {{ task.days_left }} 日（ヤバい）</span>
                         {% else %}
-                        <tr>
-                            <td colspan="3" style="color: #999; padding: 20px;">登録された課題はありません</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                            <span class="days-left days-normal">期限まであと {{ task.days_left }} 日</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="days-left" style="background: #e2e8f0; color: #666;">完了済み</span>
+                    {% endif %}
+                </div>
+                <div class="task-text">{{ task.text }}</div>
+                <div class="task-footer">
+                    <span>期限: {{ task.deadline }}</span>
+                    <div class="action-btns">
+                        {% if task.status != 'done' %}
+                        <form action="/complete" method="POST" style="margin:0; padding:0; background:none; border:none; display:inline;">
+                            <input type="hidden" name="task_value" value="{{ task.text }}">
+                            <input type="hidden" name="task_deadline" value="{{ task.deadline }}">
+                            <button type="submit" class="comp-btn">完了</button>
+                        </form>
+                        {% endif %}
+                        <form action="/delete" method="POST" style="margin:0; padding:0; background:none; border:none; display:inline;">
+                            <input type="hidden" name="task_value" value="{{ task.text }}">
+                            <input type="hidden" name="task_deadline" value="{{ task.deadline }}">
+                            <button type="submit" class="del-btn">削除</button>
+                        </form>
+                    </div>
+                </div>
+            </li>
+            {% else %}
+            <li style="text-align: center; color: #999; margin-top: 20px;">登録されている課題はありません。平和です！</li>
+            {% endfor %}
+        </ul>
+        
+        <div class="opinion-section">
+            <h3>📩 開発者（優作）への意見箱</h3>
+            <form action="/suggest" method="POST" style="background:none; border:none; padding:0; margin:0;">
+                <textarea name="opinion" placeholder="アプリへの要望やバグ報告、応援メッセージなど何でもどうぞ！匿名で届きます。" required></textarea>
+                <button type="submit" class="opinion-submit">送信する</button>
+            </form>
         </div>
-    </body>
+    </div>
+</body>
 </html>

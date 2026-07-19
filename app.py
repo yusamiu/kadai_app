@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session
-from datetime import datetime
+from datetime import datetime, timedelta  # 💡 timedelta を確実にインポート
 import os
 import psycopg2
 from psycopg2.extras import DictCursor
@@ -11,7 +11,6 @@ app.secret_key = 'yusaku_secret_key_12345'
 # 🔑 Renderの金庫（データベース）に接続する関数
 # --------------------------------------------------
 def get_db_connection():
-    # Renderの環境変数から金庫のURLを読み込む
     database_url = os.environ.get('DATABASE_URL')
     conn = psycopg2.connect(database_url, sslmode='require')
     return conn
@@ -22,7 +21,6 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
-    # 課題を入れる引き出し
     cur.execute('''
         CREATE TABLE IF NOT EXISTS tasks (
             id SERIAL PRIMARY KEY,
@@ -33,7 +31,6 @@ def init_db():
             status TEXT NOT NULL
         );
     ''')
-    # 意見を入れる引き出し
     cur.execute('''
         CREATE TABLE IF NOT EXISTS opinions (
             id SERIAL PRIMARY KEY,
@@ -45,8 +42,13 @@ def init_db():
     cur.close()
     conn.close()
 
-# アプリ起動時に引き出しを自動作成
 init_db()
+
+# 💡 リクエストが来るたびに「ログイン状態を30日維持する」を設定する安全な記述法
+@app.before_request
+def make_session_permanent():
+    session.permanent = True
+    app.permanent_session_lifetime = timedelta(days=30)
 
 # --------------------------------------------------
 # 🏠 画面のルート（部屋）の設定
@@ -58,7 +60,6 @@ def home():
     
     current_user = session['username']
     
-    # 金庫から「自分の課題だけ」を期限が近い順に並び替えて持ってくる
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=DictCursor)
     cur.execute(
@@ -92,6 +93,10 @@ def home():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login_page():
+    # 💡 すでにログインしているなら、ログイン画面は見せずにホームへ飛ばす
+    if 'username' in session:
+        return redirect(url_for('home'))
+
     if request.method == 'POST':
         username = request.form.get('username')
         if username:
@@ -114,7 +119,6 @@ def add_task():
     subject = request.form.get('subject')
     
     if task_text and deadline and subject:
-        # 金庫に新しい課題をガチャンと入れる
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute(
@@ -135,7 +139,6 @@ def complete_task():
     task_value = request.form.get('task_value')
     task_deadline = request.form.get('task_deadline')
     
-    # 金庫のステータスを「done」に書き換える
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
@@ -155,7 +158,6 @@ def delete_task():
     task_value = request.form.get('task_value')
     task_deadline = request.form.get('task_deadline')
     
-    # 金庫からデータを完全に消去する
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
@@ -172,7 +174,6 @@ def suggest():
     opinion_text = request.form.get('opinion')
     
     if opinion_text:
-        # 金庫の意見箱引き出しに保存する
         conn = get_db_connection()
         cur = conn.cursor()
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
@@ -194,11 +195,9 @@ def admin_page():
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # 1. これまでに登録された重複のないユーザー名を取得
     cur.execute("SELECT DISTINCT username FROM tasks ORDER BY username;")
     users = [row[0] for row in cur.fetchall()]
     
-    # 2. 意見箱（opinionsテーブル）から届いた意見を新しい順に取得
     opinions = []
     try:
         cur.execute("SELECT text, created_at FROM opinions ORDER BY id DESC;")
@@ -261,6 +260,5 @@ def admin_page():
     
     return rendered
 
-# 🚨 一番最後にアプリを起動する（ここがポイント！）
 if __name__ == '__main__':
     app.run(debug=True)
