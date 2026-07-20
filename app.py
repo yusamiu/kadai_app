@@ -73,16 +73,15 @@ def login():
         return redirect(url_for('index'))
         
     if request.method == 'POST':
+        # パスワードの取得とチェックを廃止し、ユーザー名だけを取得
         username = request.form.get('username', '').strip()
-        password = request.form.get('password', '').strip()
         
-        # バリデーション：空文字チェック
-        if not username or not password:
-            flash('ユーザー名とパスワードを入力してください。', 'error')
+        # バリデーション：名前が空欄の場合だけエラーにする
+        if not username:
+            flash('ユーザー名を入力してください。', 'error')
             return render_template('login.html')
             
-        # 簡易ユーザー認証（必要に応じてハッシュ化やDB照合に変更可能）
-        # ここでは誰でも自由な名前で即座にアカウントを作成してログインできる仕様
+        # 認証処理：名前さえあれば誰でもログイン成功
         session['username'] = username
         session.permanent = True  # セッションの永続化
         
