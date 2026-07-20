@@ -1,7 +1,8 @@
 import os
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz  # 🔔 日本時間の計算用に新しく追加
 from flask import Flask, render_template, request, redirect, session, jsonify, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from pywebpush import webpush, WebPushException
@@ -62,6 +63,94 @@ VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
 VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'mailto:admin@yusaku-xyz.com')
 
+# 🔔 1日に何度も通知を送らないための、実行日記録用グローバル変数
+last_run_date = None
+
+def check_and_send_daily_reminders():
+    """
+    UptimeRobot等のアクセスをトリガーにして、
+    日本時間（JST）の朝8時台に1日1回だけ未完了タスクの1日前通知を送信する
+    """
+    global last_run_date
+    
+    try:
+        # 日本時間の現在時刻を取得
+        jst = pytz.timezone('Asia/Tokyo')
+        now_jst = datetime.now(jst)
+        
+        # 毎日「朝8時台」かつ「今日まだこの通知処理を実行していない」場合のみ実行
+        if now_jst.hour == 8 and last_run_date != now_jst.date():
+            logging.info("【自動通知】日本時間 朝8時になりました。1日前リマインダー処理を開始します。")
+            
+            private_key = app.config.get('VAPID_PRIVATE_KEY')
+            if not private_key:
+                logging.error("【自動通知】VAPID_PRIVATE_KEY が設定されていないため通知をスキップします。")
+                return
+
+            # 明日の日付を計算（YYYY-MM-DD）
+            tomorrow = now_jst.date() + timedelta(days=1)
+            tomorrow_str = tomorrow.strftime('%Y-%m-%d')
+
+            # 未完了（status == 'yet'）かつ期限が明日のタスクをすべて取得
+            upcoming_tasks = Task.query.filter(
+                Task.deadline.like(f"{tomorrow_str}%"),
+                Task.status == 'yet'
+            ).all()
+
+            if not upcoming_tasks:
+                logging.info("【自動通知】明日が期限の未完了タスクはありませんでした。")
+                last_run_date = now_jst.date()  # タスクがなくても今日の処理は完了とする
+                return
+
+            success_count = 0
+
+            # 対象タスクのユーザーごとに通知を送信
+            for task in upcoming_tasks:
+                subscriptions = Subscription.query.filter_by(username=task.username).all()
+                
+                for sub in subscriptions:
+                    subscription_info = {
+                        "endpoint": sub.endpoint,
+                        "keys": {
+                            "p256dh": sub.p256dh,
+                            "auth": sub.auth
+                        }
+                    }
+                    
+                    payload = json.dumps({
+                        "title": "タスクの期限が明日です！🚨",
+                        "body": f"「{task.text}」の期限が迫っています。明日中に完了させましょう！",
+                        "icon": "/static/icon.png",
+                        "badge": "/static/icon.png"
+                    })
+                    
+                    try:
+                        webpush(
+                            subscription_info=subscription_info,
+                            data=payload,
+                            vapid_private_key=private_key,
+                            vapid_claims={"sub": ADMIN_EMAIL}
+                        )
+                        success_count += 1
+                    except WebPushException as ex:
+                        logging.warning(f"【自動通知】無効なキーを検出したため削除します ({task.username}): {str(ex)}")
+                        if ex.response and ex.response.status_code in [404, 410]:
+                            try:
+                                db.session.delete(sub)
+                                db.session.commit()
+                            except Exception as db_e:
+                                db.session.rollback()
+                                logging.error(f"【自動通知】無効トークン削除エラー: {str(db_e)}")
+                    except Exception as e:
+                        logging.error(f"【自動通知】プッシュ送信中に予期せぬエラー: {str(e)}")
+
+            logging.info(f"【自動通知】1日前リマインダー送信完了。成功: {success_count}件")
+            # 実行完了日を記録して、今日これ以上重複して送られないようにする
+            last_run_date = now_jst.date()
+            
+    except Exception as general_e:
+        logging.error(f"【自動通知】定期リマインダーシステム全体でエラー発生: {str(general_e)}")
+
 # 認証フィルター
 def is_logged_in():
     return 'username' in session
@@ -120,6 +209,9 @@ def logout():
 # --- 4. ルート：メインダッシュボード（タスク一覧） ---
 @app.route('/')
 def index():
+    # 🔔 UptimeRobot等のアクセスを検知して通知判定を走らせる（無料自動化システム）
+    check_and_send_daily_reminders()
+
     if not is_logged_in():
         return redirect(url_for('login'))
         
