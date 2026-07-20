@@ -14,15 +14,16 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'super-secret-key-yusaku-xyz-9999-alpha')
 
 # --- 🛰️ Supabase (PostgreSQL) 設定 ---
-# Renderの環境変数から取得。ローカル用のデフォルトはSQLite
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    # SQLAlchemyの仕様変更に対応するため、postgres:// を postgresql:// に変換
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///local_fallback.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# --- 🔔 WebPush通知用の鍵設定 ---
+app.config['VAPID_PRIVATE_KEY'] = os.environ.get('VAPID_PRIVATE_KEY')
+app.config['VAPID_PUBLIC_KEY'] = "BLFvsP57Nmst6JA6TS3joiz6Cnf6G1dC5mOCrEHBBsulBNcVPtKJy9zNw1SmKHA67wxLb9V3TjtAB2jJh08J8j0"
 db = SQLAlchemy(app)
 
 # --- 🗄️ データベースのテーブル（仕組み）の定義 ---
