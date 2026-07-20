@@ -362,7 +362,44 @@ def admin_page():
     cur.close()
     conn.close()
     return render_template('admin.html', suggestions=all_suggestions)
-
+# -----------------------------------------------------------------------------
+# 🌟 完全無料の自動通知キッカケ（外部からツンツンされるURL）
+# -----------------------------------------------------------------------------
+@app.route('/cron-yusaku-trigger-999')
+def cron_trigger():
+    # 明日の日付を計算
+    tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+    
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=DictCursor)
+    
+    # 「明日が期限」かつ「未完了(yet)」のタスクを取得
+    cur.execute('''
+        SELECT username, text, subject 
+        FROM tasks 
+        WHERE deadline = %s AND status = 'yet'
+    ''', (tomorrow,))
+    tomorrow_tasks = cur.fetchall()
+    
+    send_count = 0
+    for task in tomorrow_tasks:
+        target_user = task['username']
+        task_title = task['text']
+        subject_name = task['subject']
+        
+        cur.execute('SELECT subscription_json FROM subscriptions WHERE username = %s', (target_user,))
+        subs = cur.fetchall()
+        
+        notification_title = "タスク管理アプリ"
+        notification_body = f"「{subject_name}」の「{task_title}」の期限が明日に迫っています！"
+        
+        for sub in subs:
+            if send_webpush(sub['subscription_json'], notification_title, notification_body):
+                send_count += 1
+                
+    cur.close()
+    conn.close()
+    return f"自動通知の処理が完了しました！送信件数: {send_count}件"
 if __name__ == '__main__':
     # ローカル実行時のみここで初期化
     init_db()
