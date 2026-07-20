@@ -63,6 +63,14 @@ def init_db():
     cur.close()
     conn.close()
 
+# 最初のリクエストが来る前にデータベースを自動初期化する（Renderで最も安全な方式）
+@app.before_request
+def initialize():
+    # 1度だけ初期化を実行するフラグ
+    if not hasattr(app, '_db_initialized'):
+        init_db()
+        app._db_initialized = True
+
 # -----------------------------------------------------------------------------
 # 🤖 自動通知システム（バックグラウンドで毎日自動実行する仕組み）
 # -----------------------------------------------------------------------------
@@ -97,8 +105,7 @@ def auto_notification_cron():
             # 現在の時刻を取得
             now = datetime.datetime.now()
             
-            # 🎯 通知を送りたい時間を設定（例: 毎朝 08:00 に自動送信）
-            # テスト時はここを現在の時間に近い分に変更することも可能です
+            # 🎯 毎朝 08:00 に自動送信
             if now.hour == 8 and now.minute == 0:
                 print("📅 朝8時になりました。期限1日前のタスクを自動チェックします...")
                 
@@ -121,11 +128,10 @@ def auto_notification_cron():
                     task_title = task['text']
                     subject_name = task['subject']
                     
-                    # そのユーザーのスマホの登録情報（購読鍵）をすべて取得
+                    # そのユーザーのスマホの登録情報をすべて取得
                     cur.execute('SELECT subscription_json FROM subscriptions WHERE username = %s', (target_user,))
                     subs = cur.fetchall()
                     
-                    # 通知メッセージの組み立て（優作さんの理想の形）
                     notification_title = "タスク管理アプリ"
                     notification_body = f"「{subject_name}」の「{task_title}」の期限が明日に迫っています！"
                     
@@ -140,10 +146,9 @@ def auto_notification_cron():
         except Exception as e:
             print(f"【自動通知システム内エラー】: {e}")
             
-        # 30秒ごとに時間をチェックする
         time.sleep(30)
 
-# アプリ起動時に、裏側で自動通知タイマーを別行動でスタートさせる
+# アプリ起動時に、裏側で自動通知タイマーをスタートさせる
 notification_thread = threading.Thread(target=auto_notification_cron, daemon=True)
 notification_thread.start()
 
@@ -197,7 +202,7 @@ def login():
             conn.close()
             return redirect(url_for('index'))
         
-        # ユーザーがいない場合は自動で新規登録させる親切設計
+        # ユーザーがいない場合は自動で新規登録させる
         cur.execute('SELECT * FROM users WHERE username = %s', (username,))
         exist_user = cur.fetchone()
         if not exist_user:
@@ -323,7 +328,7 @@ def subscribe():
         conn.close()
 
 # -----------------------------------------------------------------------------
-# 👑 管理者用隠し部屋（手動テスト配信も残してあります）
+# 👑 管理者用隠し部屋
 # -----------------------------------------------------------------------------
 @app.route('/admin-yusaku-xyz777', methods=['GET', 'POST'])
 def admin_page():
@@ -333,7 +338,6 @@ def admin_page():
     if request.method == 'POST':
         action = request.form.get('action')
         
-        # 手動で全員に一斉テスト通知を送る処理
         if action == 'broadcast':
             title = request.form.get('title', '管理者からのお知らせ')
             body = request.form.get('body', 'これはテスト通知です。')
@@ -347,7 +351,6 @@ def admin_page():
                     success_count += 1
             return f"配信完了: {success_count} 件の端末に手動で送信しました。"
             
-        # 意見箱のデータを全削除する処理
         elif action == 'clear_suggestions':
             cur.execute('DELETE FROM suggestions')
             conn.commit()
@@ -361,6 +364,6 @@ def admin_page():
     return render_template('admin.html', suggestions=all_suggestions)
 
 if __name__ == '__main__':
+    # ローカル実行時のみここで初期化
     init_db()
-    # ローカル実行時はサーバーを起動（※Render上ではgunicornが使われます）
     app.run(host='0.0.0.0', port=5000, debug=True)
