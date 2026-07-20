@@ -22,12 +22,12 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
-    # ユーザーテーブル
+    # ユーザーテーブル（パスワードなし・名前のみに対応）
     cur.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
+            password TEXT
         );
     ''')
     # タスクテーブル
@@ -63,20 +63,19 @@ def init_db():
     cur.close()
     conn.close()
 
-# Render起動時に安全に1度だけDBを初期化する
+# 起動時にDB初期化
 try:
     init_db()
 except Exception as e:
-    print(f"【DB初期化エラー】起動時の接続に失敗しました: {e}")
+    print(f"【DB初期化エラー】: {e}")
 
 # -----------------------------------------------------------------------------
 # 🤖 自動通知システム（物理送信関数）
 # -----------------------------------------------------------------------------
 def send_webpush(subscription_json, title, body):
-    """個別のスマホへ通知を物理的に送信する共通関数"""
     private_key = os.environ.get('VAPID_PRIVATE_KEY')
     if not private_key:
-        print("【エラー】Renderの環境変数に VAPID_PRIVATE_KEY が設定されていません。")
+        print("【エラー】VAPID_PRIVATE_KEY が設定されていません。")
         return False
         
     try:
@@ -89,14 +88,14 @@ def send_webpush(subscription_json, title, body):
         )
         return True
     except WebPushException as ex:
-        print(f"【通知送信失敗】端末側で解除された可能性があります: {ex}")
+        print(f"【通知送信失敗】: {ex}")
         return False
     except Exception as e:
         print(f"【予期せぬエラー】: {e}")
         return False
 
 # -----------------------------------------------------------------------------
-# 🌐 画面遷移・WEBページの処理（ルーティング）
+# 🌐 ルーティング（画面処理）
 # -----------------------------------------------------------------------------
 
 @app.route('/')
@@ -131,39 +130,29 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        # 💡 エラー回避対策：データの受け取り方をより安全な方式（.get）に変更
+        # 💡 パスワードを要求せず、ユーザー名（username）だけを取得する形に完全修正！
         username = request.form.get('username')
-        password = request.form.get('password')
         
-        if not username or not password:
-            return "ユーザー名とパスワードを入力してください。", 400
+        if not username:
+            return "名前を入力してください。", 400
         
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=DictCursor)
         
-        # まずユーザーが存在するか確認
+        # ユーザーが存在するかチェック
         cur.execute('SELECT * FROM users WHERE username = %s', (username,))
         user = cur.fetchone()
         
-        if user:
-            # パスワードが一致すればログイン成功
-            if user['password'] == password:
-                session['username'] = username
-                cur.close()
-                conn.close()
-                return redirect(url_for('index'))
-            else:
-                cur.close()
-                conn.close()
-                return "ログイン失敗: パスワードが違います。"
-        else:
-            # ユーザーが存在しない場合は自動で新規登録
-            cur.execute('INSERT INTO users (username, password) VALUES (%s, %s)', (username, password))
+        if not user:
+            # 存在しない名前なら、その場で新しく登録する
+            cur.execute('INSERT INTO users (username) VALUES (%s)', (username,))
             conn.commit()
-            session['username'] = username
-            cur.close()
-            conn.close()
-            return redirect(url_for('index'))
+            
+        # セッションに名前を保存してログイン完了！
+        session['username'] = username
+        cur.close()
+        conn.close()
+        return redirect(url_for('index'))
             
     return render_template('login.html')
 
@@ -312,7 +301,7 @@ def admin_page():
     return render_template('admin.html', suggestions=all_suggestions)
 
 # -----------------------------------------------------------------------------
-# 🌟 完全無料の自動通知キッカケ（UptimeRobot用の超安全版URL）
+# 🌟 完全無料の自動通知キッカケ（UptimeRobot用）
 # -----------------------------------------------------------------------------
 @app.route('/cron-yusaku-trigger-999')
 def cron_trigger():
