@@ -1,371 +1,373 @@
 import os
-import psycopg2
-from psycopg2.extras import DictCursor
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-import datetime
-from urllib.parse import urlparse
-from pywebpush import webpush, WebPushException
 import json
-import threading
-import time
+import logging
+from datetime import datetime
+from flask import Flask, render_template, request, redirect, session, jsonify, url_for, flash
+from pywebpush import webpush, WebPushException
+
+# ロギングの設定（エラーの追跡用）
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
 
 app = Flask(__name__)
-app.secret_key = 'super-secret-key-yusaku'
+# セッション暗号化キー（Renderの環境変数から取得、なければ安全なデフォルト値）
+app.secret_key = os.environ.get('SECRET_KEY', 'super-secret-key-yusaku-xyz-9999-alpha')
 
-# データベース接続関数
-def get_db_connection():
-    database_url = os.environ.get('DATABASE_URL', 'postgres://localhost/kadai_app')
-    conn = psycopg2.connect(database_url, sslmode='require')
-    return conn
+# --- WebPush設定（Renderの環境変数から取得） ---
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
+ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'mailto:admin@yusaku-xyz.com')
 
-# データベースの初期化・修復
-def init_db():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    # ユーザーテーブルを作成
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT
-        );
-    ''')
-    
-    # パスワード必須ルールの解除
+# --- データ保存ファイルの定義 ---
+DATA_FILE = 'tasks.json'
+SUBS_FILE = 'subscriptions.json'
+SUGGESTIONS_FILE = 'suggestions.json'
+HISTORY_FILE = 'login_history.json'
+USER_FILE = 'users.json'  # ユーザーアカウント管理用（もしあれば）
+
+# --- データ入出力用ヘルパー関数群（バリデーション付き） ---
+def load_json_data(file_path):
+    """指定されたJSONファイルからデータを安全に読み込む関数"""
+    if not os.path.exists(file_path):
+        return []
     try:
-        cur.execute('ALTER TABLE users ALTER COLUMN password DROP NOT NULL;')
-        conn.commit()
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+            return []
+    except json.JSONDecodeError:
+        logging.error(f"JSONのパースに失敗しました: {file_path}. 空のリストを返します。")
+        return []
     except Exception as e:
-        conn.rollback()
+        logging.error(f"ファイル読み込みエラー ({file_path}): {str(e)}")
+        return []
 
-    # タスクテーブル
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS tasks (
-            id SERIAL PRIMARY KEY,
-            username TEXT NOT NULL,
-            text TEXT NOT NULL,
-            deadline DATE NOT NULL,
-            subject TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'yet'
-        );
-    ''')
-    # 意見箱テーブル
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS suggestions (
-            id SERIAL PRIMARY KEY,
-            username TEXT NOT NULL,
-            opinion TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    ''')
-    # プッシュ通知の購読情報テーブル
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS subscriptions (
-            id SERIAL PRIMARY KEY,
-            username TEXT NOT NULL,
-            subscription_json TEXT NOT NULL,
-            UNIQUE(username, subscription_json)
-        );
-    ''')
-    conn.commit()
-    cur.close()
-    conn.close()
-
-# 起動時にDB初期化とルール修復を実行
-try:
-    init_db()
-except Exception as e:
-    print(f"【DB初期化エラー】: {e}")
-
-# -----------------------------------------------------------------------------
-# 自動通知システム（物理送信関数）
-# -----------------------------------------------------------------------------
-def send_webpush(subscription_json, title, body):
-    private_key = os.environ.get('VAPID_PRIVATE_KEY')
-    if not private_key:
-        print("【エラー】VAPID_PRIVATE_KEY が設定されていません。")
-        return False
-        
+def save_json_data(file_path, data):
+    """指定されたデータをJSONファイルへ安全に保存する関数"""
     try:
-        subscription_data = json.loads(subscription_json)
-        webpush(
-            subscription_info=subscription_data,
-            data=json.dumps({"title": title, "body": body}),
-            vapid_private_key=private_key,
-            vapid_claims={"sub": "mailto:yusaku@example.com"}
-        )
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
         return True
-    except WebPushException as ex:
-        print(f"【通知送信失敗】: {ex}")
-        return False
     except Exception as e:
-        print(f"【予期せぬエラー】: {e}")
+        logging.error(f"ファイル保存エラー ({file_path}): {str(e)}")
         return False
 
-# -----------------------------------------------------------------------------
-# ルーティング（画面処理）
-# -----------------------------------------------------------------------------
+# --- 認証フィルター（デコレータ相当のチェック） ---
+def is_logged_in():
+    return 'username' in session
 
-@app.route('/')
-def index():
-    if 'username' not in session:
-        return redirect(url_for('login'))
-    
-    username = session['username']
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=DictCursor)
-    
-    cur.execute('SELECT * FROM tasks WHERE username = %s ORDER BY deadline ASC', (username,))
-    raw_tasks = cur.fetchall()
-    
-    tasks = []
-    today = datetime.date.today()
-    for row in raw_tasks:
-        task_date = row['deadline']
-        
-        # データベースから文字列として取得された場合の型変換（エラー対策）
-        if isinstance(task_date, str):
-            try:
-                task_date = datetime.datetime.strptime(task_date, '%Y-%m-%d').date()
-            except ValueError:
-                try:
-                    task_date = datetime.datetime.strptime(task_date.split()[0], '%Y-%m-%d').date()
-                except Exception:
-                    task_date = today
+# --- 1. ルート：サービworkerの配信用（PWA対応） ---
+@app.route('/service-worker.js')
+def service_worker():
+    """フロントエンドからService Workerを要求された際、正しいMIMEタイプで返却する"""
+    try:
+        return app.send_static_file('service-worker.js')
+    except Exception as e:
+        logging.error(f"Service Worker配信エラー: {str(e)}")
+        return "Service Worker Not Found", 404
 
-        days_left = (task_date - today).days
-        tasks.append({
-            'text': row['text'],
-            'deadline': task_date.isoformat(),
-            'subject': row['subject'],
-            'status': row['status'],
-            'days_left': days_left
-        })
-        
-    cur.close()
-    conn.close()
-    return render_template('index.html', username=username, tasks=tasks)
-
+# --- 2. ルート：ログイン画面 ＆ 認証処理 ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        
-        if not username:
-            return "名前を入力してください。", 400
-        
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=DictCursor)
-        
-        # ユーザーが存在するかチェック
-        cur.execute('SELECT * FROM users WHERE username = %s', (username,))
-        user = cur.fetchone()
-        
-        if not user:
-            # 存在しない名前なら、その場で新しく登録する
-            cur.execute('INSERT INTO users (username) VALUES (%s)', (username,))
-            conn.commit()
-            
-        # セッションに名前を保存してログイン完了
-        session['username'] = username
-        cur.close()
-        conn.close()
+    if is_logged_in():
         return redirect(url_for('index'))
+        
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        
+        # バリデーション：空文字チェック
+        if not username or not password:
+            flash('ユーザー名とパスワードを入力してください。', 'error')
+            return render_template('login.html')
             
+        # 簡易ユーザー認証（必要に応じてハッシュ化やDB照合に変更可能）
+        # ここでは誰でも自由な名前で即座にアカウントを作成してログインできる仕様
+        session['username'] = username
+        session.permanent = True  # セッションの永続化
+        
+        # 【機能追加】ログイン履歴を保存するロジック
+        try:
+            history = load_json_data(HISTORY_FILE)
+            new_log = {
+                'username': username,
+                'login_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'ip_address': request.remote_addr or 'Unknown'
+            }
+            history.insert(0, new_log)  # 先頭（最新）に追加
+            history = history[:100]     # 最大100件まで保持
+            save_json_data(HISTORY_FILE, history)
+        except Exception as e:
+            logging.error(f"ログイン履歴の保存中にエラー: {str(e)}")
+            
+        logging.info(f"ユーザーログイン成功: {username}")
+        return redirect(url_for('index'))
+        
     return render_template('login.html')
 
+# --- 3. ルート：ログアウト処理 ---
 @app.route('/logout')
 def logout():
-    session.pop('username', None)
+    username = session.get('username', '未知のユーザー')
+    session.clear()  # セッション情報を完全に消去
+    logging.info(f"ユーザーログアウト: {username}")
     return redirect(url_for('login'))
 
+# --- 4. ルート：メインダッシュボード（タスク一覧） ---
+@app.route('/')
+def index():
+    if not is_logged_in():
+        return redirect(url_for('login'))
+        
+    username = session['username']
+    all_tasks = load_json_data(DATA_FILE)
+    
+    # 現在ログインしているユーザーのタスクのみをフィルタリング
+    user_tasks = [task for task in all_tasks if task.get('username') == username]
+    
+    # 各タスクの残り日数をリアルタイム計算
+    today = datetime.now().date()
+    for task in user_tasks:
+        try:
+            deadline_str = task.get('deadline')
+            if deadline_str:
+                deadline_date = datetime.strptime(deadline_str, '%Y-%m-%d').date()
+                task['days_left'] = (deadline_date - today).days
+            else:
+                task['days_left'] = 999
+        except Exception as e:
+            logging.error(f"日付計算エラー (タスク: {task.get('text')}): {str(e)}")
+            task['days_left'] = 999
+            
+    return render_template('index.html', username=username, tasks=user_tasks, vapid_public_key=VAPID_PUBLIC_KEY)
+
+# --- 5. ルート：新規タスク追加 ---
 @app.route('/add', methods=['POST'])
 def add_task():
-    if 'username' not in session:
+    if not is_logged_in():
         return redirect(url_for('login'))
+        
+    text = request.form.get('task', '').strip()
+    deadline = request.form.get('deadline', '').strip()
+    subject = request.form.get('subject', '').strip()
     
-    username = session['username']
-    task_text = request.form.get('task', '')
-    deadline = request.form.get('deadline', '')
-    subject = request.form.get('subject', '')
+    # バリデーション：必要な情報が揃っているか
+    if not text or not deadline or not subject:
+        flash('すべての項目を正しく入力してください。', 'error')
+        return redirect(url_for('index'))
+        
+    all_tasks = load_json_data(DATA_FILE)
     
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        'INSERT INTO tasks (username, text, deadline, subject, status) VALUES (%s, %s, %s, %s, %s)',
-        (username, task_text, deadline, subject, 'yet')
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+    # 新しいタスクオブジェクトを作成して保存
+    new_task = {
+        'username': session['username'],
+        'text': text,
+        'deadline': deadline,
+        'subject': subject,
+        'status': 'yet',
+        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    }
+    all_tasks.append(new_task)
+    save_json_data(DATA_FILE, all_tasks)
+    
+    logging.info(f"タスク追加: {session['username']} -> {text}")
     return redirect(url_for('index'))
 
+# --- 6. ルート：タスク完了処理 ---
 @app.route('/complete', methods=['POST'])
 def complete_task():
-    if 'username' not in session:
+    if not is_logged_in():
         return redirect(url_for('login'))
         
+    task_value = request.form.get('task_value', '').strip()
+    task_deadline = request.form.get('task_deadline', '').strip()
     username = session['username']
-    task_value = request.form.get('task_value', '')
-    task_deadline = request.form.get('task_deadline', '')
     
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE tasks SET status = 'done' WHERE username = %s AND text = %s AND deadline = %s",
-        (username, task_value, task_deadline)
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+    all_tasks = load_json_data(DATA_FILE)
+    updated = False
+    
+    # 特定のタスクを探してステータスを 'done' に変更
+    for task in all_tasks:
+        if (task.get('username') == username and 
+            task.get('text') == task_value and 
+            task.get('deadline') == task_deadline and 
+            task.get('status') == 'yet'):
+            task['status'] = 'done'
+            task['completed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            updated = True
+            break
+            
+    if updated:
+        save_json_data(DATA_FILE, all_tasks)
+        logging.info(f"タスク完了: {username} -> {task_value}")
+    else:
+        logging.warning(f"完了対象のタスクが見つかりません: {username} -> {task_value}")
+        
     return redirect(url_for('index'))
 
+# --- 7. ルート：タスク削除処理 ---
 @app.route('/delete', methods=['POST'])
 def delete_task():
-    if 'username' not in session:
+    if not is_logged_in():
         return redirect(url_for('login'))
         
+    task_value = request.form.get('task_value', '').strip()
+    task_deadline = request.form.get('task_deadline', '').strip()
     username = session['username']
-    task_value = request.form.get('task_value', '')
-    task_deadline = request.form.get('task_deadline', '')
     
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "DELETE FROM tasks WHERE username = %s AND text = %s AND deadline = %s",
-        (username, task_value, task_deadline)
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+    all_tasks = load_json_data(DATA_FILE)
+    # 対象タスクを除外した新しいリストを作成
+    filtered_tasks = [t for t in all_tasks if not (
+        t.get('username') == username and 
+        t.get('text') == task_value and 
+        t.get('deadline') == task_deadline
+    )]
+    
+    if len(all_tasks) != len(filtered_tasks):
+        save_json_data(DATA_FILE, filtered_tasks)
+        logging.info(f"タスク削除: {username} -> {task_value}")
+    else:
+        logging.warning(f"削除対象のタスクが見つかりません: {username} -> {task_value}")
+        
     return redirect(url_for('index'))
 
+# --- 8. ルート：意見箱への投稿受領 ---
 @app.route('/suggest', methods=['POST'])
 def suggest():
-    if 'username' not in session:
+    if not is_logged_in():
         return redirect(url_for('login'))
-    username = session['username']
-    opinion = request.form.get('opinion', '')
+        
+    opinion = request.form.get('opinion', '').strip()
+    if not opinion:
+        return redirect(url_for('index'))
+        
+    suggestions = load_json_data(SUGGESTIONS_FILE)
+    new_suggestion = {
+        'username': session['username'],
+        'opinion': opinion,
+        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    }
+    suggestions.insert(0, new_suggestion)  # 最新が上にくるように保持
+    save_json_data(SUGGESTIONS_FILE, suggestions)
     
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute('INSERT INTO suggestions (username, opinion) VALUES (%s, %s)', (username, opinion))
-    conn.commit()
-    cur.close()
-    conn.close()
+    logging.info(f"意見箱に投稿を受領: {session['username']} -> {opinion[:20]}...")
     return redirect(url_for('index'))
 
-# -----------------------------------------------------------------------------
-# 通知デバイス登録用API受取口
-# -----------------------------------------------------------------------------
+# --- 9. ルート：WebPush通知用の購読鍵の登録・更新 ---
 @app.route('/subscribe', methods=['POST'])
 def subscribe():
-    if 'username' not in session:
-        return jsonify({"error": "Unauthorized"}), 401
-        
-    username = session['username']
-    subscription_data = request.get_data(as_text=True)
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
+    """ブラウザ側で生成されたPushSubscriptionオブジェクトをサーバーに保存する"""
     try:
-        cur.execute('''
-            INSERT INTO subscriptions (username, subscription_json) 
-            VALUES (%s, %s) 
-            ON CONFLICT (username, subscription_json) DO NOTHING
-        ''', (username, subscription_data))
-        conn.commit()
-        return jsonify({"success": True}), 201
+        sub_data = request.get_json()
+        if not sub_data or 'endpoint' not in sub_data:
+            return jsonify({"status": "error", "message": "無効な購読データ形式です。"}), 400
+            
+        subs = load_json_data(SUBS_FILE)
+        
+        # エンドポイントの重複チェック（すでに登録済みの場合は上書きせずスキップ）
+        endpoints = [s.get('endpoint') for s in subs if isinstance(s, dict)]
+        if sub_data['endpoint'] not in endpoints:
+            # 誰の端末情報かを紐付けるためにユーザー名を付与しておく
+            sub_data['username'] = session.get('username', 'guest')
+            sub_data['registered_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            subs.append(sub_data)
+            save_json_data(SUBS_FILE, subs)
+            logging.info(f"新しい通知端末を登録しました。所属: {sub_data['username']}")
+            
+        return jsonify({"status": "success", "message": "通知登録が正常に完了しました。"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
+        logging.error(f"通知登録処理中に致命的なエラー: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-# -----------------------------------------------------------------------------
-# 管理者用隠し部屋
-# -----------------------------------------------------------------------------
+# --- 10. ルート：👑 管理者コントロールパネル ---
 @app.route('/admin-yusaku-xyz777', methods=['GET', 'POST'])
 def admin_page():
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=DictCursor)
-    
+    # 常に最新のデータをJSONからロード
+    suggestions = load_json_data(SUGGESTIONS_FILE)
+    login_history = load_json_data(HISTORY_FILE)
+    subscriptions_count = len(load_json_data(SUBS_FILE))
+
     if request.method == 'POST':
-        action = request.form.get('action')
+        action = request.form.get('action', '').strip()
         
-        if action == 'broadcast':
-            title = request.form.get('title', '管理者からのお知らせ')
-            body = request.form.get('body', 'これはテスト通知です。')
-            
-            cur.execute('SELECT subscription_json FROM subscriptions')
-            all_subs = cur.fetchall()
-            
-            success_count = 0
-            for row in all_subs:
-                if send_webpush(row['subscription_json'], title, body):
-                    success_count += 1
-            return f"配信完了: {success_count} 件の端末に手動で送信しました。"
-            
-        elif action == 'clear_suggestions':
-            cur.execute('DELETE FROM suggestions')
-            conn.commit()
+        # アクション①: 意見箱データの全消去
+        if action == 'clear_suggestions':
+            if os.path.exists(SUGGESTIONS_FILE):
+                try:
+                    os.remove(SUGGESTIONS_FILE)
+                    logging.info("管理者により意見箱データが完全に初期化されました。")
+                except Exception as e:
+                    logging.error(f"意見箱削除エラー: {str(e)}")
             return redirect(url_for('admin_page'))
             
-    cur.execute('SELECT * FROM suggestions ORDER BY created_at DESC')
-    all_suggestions = cur.fetchall()
-    
-    cur.close()
-    conn.close()
-    return render_template('admin.html', suggestions=all_suggestions)
-
-# -----------------------------------------------------------------------------
-# 完全無料の自動通知キッカケ（UptimeRobot用）
-# -----------------------------------------------------------------------------
-@app.route('/cron-yusaku-trigger-999')
-def cron_trigger():
-    conn = None
-    cur = None
-    try:
-        tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
-        
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=DictCursor)
-        
-        cur.execute('''
-            SELECT username, text, subject 
-            FROM tasks 
-            WHERE deadline = %s AND status = 'yet'
-        ''', (tomorrow,))
-        tomorrow_tasks = cur.fetchall()
-        
-        send_count = 0
-        for task in tomorrow_tasks:
-            target_user = task['username']
-            task_title = task['text']
-            subject_name = task['subject']
+        # アクション②: ログイン履歴データの全消去
+        elif action == 'clear_history':
+            if os.path.exists(HISTORY_FILE):
+                try:
+                    os.remove(HISTORY_FILE)
+                    logging.info("管理者によりログイン履歴データが完全に初期化されました。")
+                except Exception as e:
+                    logging.error(f"ログイン履歴削除エラー: {str(e)}")
+            return redirect(url_for('admin_page'))
             
-            cur.execute('SELECT subscription_json FROM subscriptions WHERE username = %s', (target_user,))
-            subs = cur.fetchall()
+        # アクション③: 登録されているすべての端末へ全体通知の一斉配信
+        elif action == 'broadcast':
+            title = request.form.get('title', '管理者からのお知らせ').strip()
+            body = request.form.get('body', 'これは全体配信テスト通知です。').strip()
             
-            notification_title = "タスク管理アプリ"
-            notification_body = f"「{subject_name}」の「{task_title}」の期限が明日に迫っています！"
+            subs = load_json_data(SUBS_FILE)
+            if not subs:
+                logging.warning("通知対象の登録端末が1件もありません。")
+                return redirect(url_for('admin_page'))
+                
+            payload = json.dumps({
+                "title": title,
+                "body": body,
+                "icon": "/static/icon.png",
+                "badge": "/static/icon.png"
+            })
+            
+            # 鍵が無効（期限切れなど）だった場合にリストから除外するための追跡
+            valid_subs = []
+            success_count = 0
+            fail_count = 0
             
             for sub in subs:
-                if send_webpush(sub['subscription_json'], notification_title, notification_body):
-                    send_count += 1
+                try:
+                    # サブスクリプション情報から内部管理用の拡張キーを削除して通知モジュールに渡す
+                    clean_sub = {k: v for k, v in sub.items() if k != 'username' and k != 'registered_at'}
                     
-        return f"自動通知の処理が完了しました！送信件数: {send_count}件"
+                    webpush(
+                        subscription_info=clean_sub,
+                        data=payload,
+                        vapid_private_key=VAPID_PRIVATE_KEY,
+                        vapid_claims={"sub": ADMIN_EMAIL}
+                    )
+                    valid_subs.append(sub)  # 送信成功したサブスクリプションを保持
+                    success_count += 1
+                except WebPushException as ex:
+                    # 410 Gone や 404 Not Found など、無効になった古いプッシュキーを自動検知して排除
+                    logging.warning(f"無効なプッシュ通知キーを検出・スキップします: {str(ex)}")
+                    fail_count += 1
+                except Exception as e:
+                    logging.error(f"通知送信中に予期せぬ例外: {str(e)}")
+                    valid_subs.append(sub)  # 一時的なネットワークエラーを考慮し一旦残す
+                    
+            # 有効なリストのみでJSONファイルを更新保存
+            save_json_data(SUBS_FILE, valid_subs)
+            logging.info(f"全体通知完了。成功: {success_count}件, 自動削除された無効端末: {fail_count}件")
+            return redirect(url_for('admin_page'))
 
-    except Exception as e:
-        print(f"【トリガー内エラー】: {e}")
-        return f"エラーが発生しました: {e}", 500
+    return render_template(
+        'admin.html', 
+        suggestions=suggestions, 
+        login_history=login_history,
+        subs_count=subscriptions_count
+    )
 
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
-
+# --- 11. アプリケーション起動エントリーポイント ---
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # 開発環境と本番環境（Render）の双方に対応する環境適応型ポート設定
+    port = int(os.environ.get('PORT', 5000))
+    # Render上では debug=False を推奨しますが、調整しやすいよう標準動作で設定
+    app.run(debug=True, host='0.0.0.0', port=port)
