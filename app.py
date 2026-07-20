@@ -63,16 +63,15 @@ def init_db():
     cur.close()
     conn.close()
 
-# 最初のリクエストが来る前にデータベースを自動初期化する（Renderで最も安全な方式）
+# 最初のリクエストが来る前にデータベースを自動初期化する
 @app.before_request
 def initialize():
-    # 1度だけ初期化を実行するフラグ
     if not hasattr(app, '_db_initialized'):
         init_db()
         app._db_initialized = True
 
 # -----------------------------------------------------------------------------
-# 🤖 自動通知システム（バックグラウンドで毎日自動実行する仕組み）
+# 🤖 自動通知システム（物理送信関数）
 # -----------------------------------------------------------------------------
 def send_webpush(subscription_json, title, body):
     """個別のスマホへ通知を物理的に送信する共通関数"""
@@ -96,61 +95,6 @@ def send_webpush(subscription_json, title, body):
     except Exception as e:
         print(f"【予期せぬエラー】: {e}")
         return False
-
-def auto_notification_cron():
-    """24時間いつでも裏で待機し、毎日指定の時間に1日前タスクを自動通知する関数"""
-    print("⏰ 自動通知システム（24時間監視）がバックグラウンドで起動しました。")
-    while True:
-        try:
-            # 現在の時刻を取得
-            now = datetime.datetime.now()
-            
-            # 🎯 毎朝 08:00 に自動送信
-            if now.hour == 8 and now.minute == 0:
-                print("📅 朝8時になりました。期限1日前のタスクを自動チェックします...")
-                
-                # 明日の日付を計算
-                tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
-                
-                conn = get_db_connection()
-                cur = conn.cursor(cursor_factory=DictCursor)
-                
-                # 「明日が期限」かつ「未完了(yet)」のタスクと、その所有者をまとめて取得
-                cur.execute('''
-                    SELECT username, text, subject 
-                    FROM tasks 
-                    WHERE deadline = %s AND status = 'yet'
-                ''', (tomorrow,))
-                tomorrow_tasks = cur.fetchall()
-                
-                for task in tomorrow_tasks:
-                    target_user = task['username']
-                    task_title = task['text']
-                    subject_name = task['subject']
-                    
-                    # そのユーザーのスマホの登録情報をすべて取得
-                    cur.execute('SELECT subscription_json FROM subscriptions WHERE username = %s', (target_user,))
-                    subs = cur.fetchall()
-                    
-                    notification_title = "タスク管理アプリ"
-                    notification_body = f"「{subject_name}」の「{task_title}」の期限が明日に迫っています！"
-                    
-                    for sub in subs:
-                        send_webpush(sub['subscription_json'], notification_title, notification_body)
-                        print(f"🚀 {target_user} さん宛てに自動通知を送出しました: {task_title}")
-                        
-                conn.close()
-                # 連投を防ぐために1分間スリープ
-                time.sleep(60)
-                
-        except Exception as e:
-            print(f"【自動通知システム内エラー】: {e}")
-            
-        time.sleep(30)
-
-# アプリ起動時に、裏側で自動通知タイマーをスタートさせる
-notification_thread = threading.Thread(target=auto_notification_cron, daemon=True)
-notification_thread.start()
 
 # -----------------------------------------------------------------------------
 # 🌐 画面遷移・WEBページの処理（ルーティング）
@@ -362,45 +306,59 @@ def admin_page():
     cur.close()
     conn.close()
     return render_template('admin.html', suggestions=all_suggestions)
+
 # -----------------------------------------------------------------------------
-# 🌟 完全無料の自動通知キッカケ（外部からツンツンされるURL）
+# 🌟 完全無料の自動通知キッカケ（UptimeRobot用の超安全版URL）
 # -----------------------------------------------------------------------------
 @app.route('/cron-yusaku-trigger-999')
 def cron_trigger():
-    # 明日の日付を計算
-    tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
-    
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=DictCursor)
-    
-    # 「明日が期限」かつ「未完了(yet)」のタスクを取得
-    cur.execute('''
-        SELECT username, text, subject 
-        FROM tasks 
-        WHERE deadline = %s AND status = 'yet'
-    ''', (tomorrow,))
-    tomorrow_tasks = cur.fetchall()
-    
-    send_count = 0
-    for task in tomorrow_tasks:
-        target_user = task['username']
-        task_title = task['text']
-        subject_name = task['subject']
+    conn = None
+    cur = None
+    try:
+        # 明日の日付を計算
+        tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
         
-        cur.execute('SELECT subscription_json FROM subscriptions WHERE username = %s', (target_user,))
-        subs = cur.fetchall()
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=DictCursor)
         
-        notification_title = "タスク管理アプリ"
-        notification_body = f"「{subject_name}」の「{task_title}」の期限が明日に迫っています！"
+        # 「明日が期限」かつ「未完了(yet)」のタスクを取得
+        cur.execute('''
+            SELECT username, text, subject 
+            FROM tasks 
+            WHERE deadline = %s AND status = 'yet'
+        ''', (tomorrow,))
+        tomorrow_tasks = cur.fetchall()
         
-        for sub in subs:
-            if send_webpush(sub['subscription_json'], notification_title, notification_body):
-                send_count += 1
-                
-    cur.close()
-    conn.close()
-    return f"自動通知の処理が完了しました！送信件数: {send_count}件"
+        send_count = 0
+        for task in tomorrow_tasks:
+            target_user = task['username']
+            task_title = task['text']
+            subject_name = task['subject']
+            
+            # ユーザーごとの購読情報を取得
+            cur.execute('SELECT subscription_json FROM subscriptions WHERE username = %s', (target_user,))
+            subs = cur.fetchall()
+            
+            notification_title = "タスク管理アプリ"
+            notification_body = f"「{subject_name}」の「{task_title}」の期限が明日に迫っています！"
+            
+            for sub in subs:
+                if send_webpush(sub['subscription_json'], notification_title, notification_body):
+                    send_count += 1
+                    
+        return f"自動通知の処理が完了しました！送信件数: {send_count}件"
+
+    except Exception as e:
+        print(f"【トリガー内エラー】: {e}")
+        return f"エラーが発生しました: {e}", 500
+
+    finally:
+        # ⚠️ 何があっても絶対にデータベースとの接続を完全に切断する（パンク防止の安全装置）
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
 if __name__ == '__main__':
-    # ローカル実行時のみここで初期化
     init_db()
     app.run(host='0.0.0.0', port=5000, debug=True)
