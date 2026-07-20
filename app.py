@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from datetime import datetime, timedelta
 import os
 import psycopg2
 from psycopg2.extras import DictCursor
+import json
 
 app = Flask(__name__)
 app.secret_key = 'yusaku_secret_key_12345'
@@ -21,6 +22,8 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
+    
+    # タスク保存用
     cur.execute('''
         CREATE TABLE IF NOT EXISTS tasks (
             id SERIAL PRIMARY KEY,
@@ -31,6 +34,8 @@ def init_db():
             status TEXT NOT NULL
         );
     ''')
+    
+    # 意見箱用
     cur.execute('''
         CREATE TABLE IF NOT EXISTS opinions (
             id SERIAL PRIMARY KEY,
@@ -38,6 +43,17 @@ def init_db():
             text TEXT NOT NULL
         );
     ''')
+    
+    # 🔔 【新設】スマホ通知のトークン（送り先の鍵）を保存する用
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+            id SERIAL PRIMARY KEY,
+            username TEXT NOT NULL,
+            subscription_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    ''')
+    
     conn.commit()
     cur.close()
     conn.close()
@@ -96,7 +112,6 @@ def home():
 # --------------------------------------------------
 @app.route('/login', methods=['GET', 'POST'])
 def login_page():
-    # すでにログインしているなら、ログイン画面は見せずにホームへ飛ばす（自動ログイン）
     if 'username' in session:
         return redirect(url_for('home'))
 
@@ -206,7 +221,35 @@ def suggest():
     return redirect(url_for('home'))
 
 # --------------------------------------------------
-# 🔐 管理者用の隠しページ（ユーザー一覧＆意見箱の確認）
+# 🔔 【新設】スマホの「通知の鍵」を金庫に保存するエンドポイント
+# --------------------------------------------------
+@app.route('/subscribe', methods=['POST'])
+def subscribe():
+    if 'username' not in session:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    
+    subscription_data = request.get_json()
+    if not subscription_data:
+        return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+        
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # すでに同じ鍵が登録されているかチェックして、なければ保存
+    sub_json_str = json.dumps(subscription_data)
+    cur.execute(
+        "INSERT INTO web_push_subscriptions (username, subscription_json) VALUES (%s, %s)",
+        (session['username'], sub_json_str)
+    )
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return jsonify({'status': 'success', 'message': 'Subscribed successfully'})
+
+# --------------------------------------------------
+# 🔐 管理者用の隠しページ
 # --------------------------------------------------
 @app.route('/admin-yusaku-xyz777')
 def admin_page():
@@ -222,6 +265,10 @@ def admin_page():
         opinions = cur.fetchall()
     except Exception:
         conn.rollback()
+        
+    # 🔔 通知の登録数をカウント
+    cur.execute("SELECT COUNT(*) FROM web_push_subscriptions;")
+    push_count = cur.fetchone()[0]
     
     cur.close()
     conn.close()
@@ -241,6 +288,7 @@ def admin_page():
             li { background: white; padding: 10px 15px; margin-bottom: 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 14px; }
             .time { font-size: 11px; color: #7f8c8d; display: block; margin-top: 4px; }
             .back-btn { display: inline-block; background: #7f8c8d; color: white; text-decoration: none; padding: 8px 12px; border-radius: 4px; font-size: 13px; margin-bottom: 20px; }
+            .badge { background: #e74c3c; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; }
         </style>
     </head>
     <body>
@@ -252,6 +300,8 @@ def admin_page():
             REPLACE_USER_LIST
         </ul>
         
+        <h2>🔔 通知機能がONになっている端末数: <span class="badge">REPLACE_PUSH_COUNT</span></h2>
+        
         <h2>📩 意見箱に届いたメッセージ ({% len_opinions %})</h2>
         <ul>
             REPLACE_OPINION_LIST
@@ -260,7 +310,7 @@ def admin_page():
     </html>
     """
     
-    rendered = html_content.replace("{% len_users %}", str(len(users))).replace("{% len_opinions %}", str(len(opinions)))
+    rendered = html_content.replace("{% len_users %}", str(len(users))).replace("{% len_opinions %}", str(len(opinions))).replace("REPLACE_PUSH_COUNT", str(push_count))
     
     user_list_html = ""
     for u in users:

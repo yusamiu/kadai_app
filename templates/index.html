@@ -4,168 +4,208 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>タスク管理アプリ</title>
-    <style>
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fdf6ec; margin: 0; padding: 20px; color: #4a3728; }
-        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(212, 163, 115, 0.15); }
-        h1 { text-align: center; color: #d4a373; margin-bottom: 5px; font-size: 24px; }
-        .user-welcome { text-align: center; color: #8c7865; font-size: 14px; margin-bottom: 25px; }
-        .logout-link { color: #e76f51; text-decoration: none; margin-left: 10px; font-weight: bold; }
-        form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px; background: #fefae0; padding: 15px; border-radius: 8px; border: 1px solid #e9edc9; }
-        .form-row { display: flex; gap: 10px; }
-        input[type="text"], input[type="date"], select { flex: 1; padding: 10px; border: 1px solid #ccd5ae; border-radius: 6px; font-size: 14px; background: white; color: #4a3728; min-width: 0; }
-        
-        /* 💡 「その他」の入力枠用のスタイル（最初は非表示） */
-        .other-input-container {
-            display: none;
-            width: 100%;
-        }
-        
-        input[type="date"] {
-            position: relative;
-        }
-        input[type="date"]::before {
-            content: "📅 期限を選択";
-            position: absolute;
-            left: 10px;
-            color: #8c7865;
-            pointer-events: none;
-            width: 80%;
-            background: white;
-        }
-        input[type="date"]:focus::before,
-        input[type="date"]:valid::before {
-            display: none;
-        }
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="タスク管理">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icon.png">
 
-        button.add-btn { background: #d4a373; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
-        button.add-btn:hover { background: #c69465; }
-        .task-list { list-style: none; padding: 0; margin: 0; }
-        .task-item { display: flex; flex-direction: column; background: white; padding: 15px; margin-bottom: 12px; border-radius: 8px; border-left: 5px solid #d4a373; box-shadow: 0 2px 5px rgba(0,0,0,0.03); position: relative; }
-        .task-item.done { border-left-color: #52b788; background: #fafafa; }
-        .task-item.done .task-text { text-decoration: line-through; color: #b7b7b7; }
-        .task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-        .subject-tag { background: #faedcd; color: #604d3b; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-        .task-text { font-size: 16px; font-weight: 500; margin: 5px 0; word-break: break-all; }
-        .task-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; font-size: 12px; color: #8c7865; }
-        .days-left { font-weight: bold; padding: 2px 6px; border-radius: 4px; }
-        .days-urgent { background: #f8d7da; color: #721c24; }
-        .days-normal { background: #fefae0; color: #d4a373; }
-        .action-btns { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
-        .action-btns button { padding: 6px 12px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: bold; }
-        .comp-btn { background: #52b788; color: white; }
-        .del-btn { background: #e76f51; color: white; }
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f4f8; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        h1 { font-size: 24px; color: #2c3e50; margin-top: 0; text-align: center; }
         
-        .opinion-section { margin-top: 30px; border-top: 2px dashed #e9edc9; padding-top: 20px; }
-        .opinion-section h3 { font-size: 14px; color: #8c7865; margin-bottom: 8px; }
-        .opinion-section textarea { width: 100%; box-sizing: border-box; height: 38px; padding: 8px; border: 1px solid #ccd5ae; border-radius: 6px; font-size: 12px; resize: none; margin-bottom: 6px; }
-        .opinion-submit { background: #8c7865; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; width: fit-content; align-family: flex-end; }
-        .opinion-submit:hover { background: #73604e; }
+        /* 🔔 【新設】通知ボタンのスタイル */
+        .notification-banner { background: #e8f4fd; border: 1px solid #b3d7ff; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; display: none; }
+        .notify-btn { background: #007bff; color: white; border: none; padding: 10px 20px; font-size: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        .notify-btn:hover { background: #0056b3; }
+        
+        .user-info { text-align: right; font-size: 14px; color: #7f8c8d; margin-bottom: 20px; }
+        .logout-btn { color: #e74c3c; text-decoration: none; margin-left: 10px; }
+        form { display: grid; gap: 12px; margin-bottom: 30px; background: #f8fafc; padding: 20px; border-radius: 12px; }
+        input, select, button { padding: 12px; font-size: 16px; border: 1px solid #cbd5e1; border-radius: 8px; }
+        button.add-btn { background: #10b981; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button.add-btn:hover { background: #059669; }
+        .task-list { list-style: none; padding: 0; }
+        .task-item { background: white; padding: 16px; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border-left: 5px solid #3b82f6; display: flex; justify-content: space-between; align-items: center; }
+        .task-item.done { border-left-color: #cbd5e1; opacity: 0.6; }
+        .task-item.done .task-text { text-decoration: line-through; color: #94a3b8; }
+        .task-info { flex-grow: 1; }
+        .task-text { font-weight: bold; font-size: 16px; margin-bottom: 4px; }
+        .task-meta { font-size: 12px; color: #64748b; }
+        .badge { background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 6px; font-weight: bold; margin-right: 6px; }
+        .alert-text { color: #ef4444; font-weight: bold; }
+        .actions { display: flex; gap: 8px; }
+        .action-btn { border: none; padding: 8px 12px; font-size: 13px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .comp-btn { background: #d1fae5; color: #065f46; }
+        .del-btn { background: #fee2e2; color: #991b1b; }
+        
+        .suggest-section { margin-top: 4px; padding-top: 20px; border-top: 1px dashed #cbd5e1; }
+        .suggest-title { font-size: 14px; font-weight: bold; color: #64748b; margin-bottom: 8px; }
+        .suggest-box { display: flex; gap: 8px; }
+        .suggest-input { flex-grow: 1; padding: 8px 12px; font-size: 14px; }
+        .suggest-btn { background: #64748b; color: white; border: none; padding: 8px 16px; font-size: 14px; border-radius: 8px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>タスク管理アプリ</h1>
-        <div class="user-welcome">ログイン中: <strong>{{ username }}</strong> さん <a href="/logout" class="logout-link">ログアウト</a></div>
-        
-        <form action="/add" method="POST" id="taskForm">
-            <div class="form-row">
-                <select name="subject" id="subjectSelect" required onchange="toggleOtherInput()">
-                    <option value="" disabled selected>分類を選択</option>
-                    <option value="国語">国語</option>
-                    <option value="数学">数学</option>
-                    <option value="英語">英語</option>
-                    <option value="理科">理科</option>
-                    <option value="社会">社会</option>
-                    <option value="その他">その他</option>
-                </select>
-                <input type="date" name="deadline" required>
-            </div>
-            
-            <div class="other-input-container" id="otherInputContainer">
-                <input type="text" id="customSubject" placeholder="具体的な分類を入力（例: 買い物、自由研究）" autocomplete="off">
-            </div>
 
-            <input type="text" name="task" placeholder="タスクの内容を入力してください..." required autocomplete="off">
-            <button type="submit" class="add-btn">＋ タスクを登録する</button>
-        </form>
-
-        <ul class="task-list">
-            {% for task in tasks %}
-            <li class="task-item {% if task.status == 'done' %}done{% endif %}">
-                <div class="task-header">
-                    <span class="subject-tag">{{ task.subject }}</span>
-                    {% if task.status != 'done' %}
-                        {% if task.days_left <= 1 %}
-                            <span class="days-left days-urgent">期限まであと {{ task.days_left }} 日（ヤバい）</span>
-                        {% else %}
-                            <span class="days-left days-normal">期限まであと {{ task.days_left }} 日</span>
-                        {% endif %}
-                    {% else %}
-                        <span class="days-left" style="background: #e2e8f0; color: #666;">完了済み</span>
-                    {% endif %}
-                </div>
-                <div class="task-text">{{ task.text }}</div>
-                <div class="task-footer">
-                    <span>期限: {{ task.deadline }}</span>
-                    <div class="action-btns">
-                        {% if task.status != 'done' %}
-                        <form action="/complete" method="POST" style="margin:0; padding:0; background:none; border:none; display:inline;">
-                            <input type="hidden" name="task_value" value="{{ task.text }}">
-                            <input type="hidden" name="task_deadline" value="{{ task.deadline }}">
-                            <button type="submit" class="comp-btn">完了</button>
-                        </form>
-                        {% endif %}
-                        <form action="/delete" method="POST" style="margin:0; padding:0; background:none; border:none; display:inline;">
-                            <input type="hidden" name="task_value" value="{{ task.text }}">
-                            <input type="hidden" name="task_deadline" value="{{ task.deadline }}">
-                            <button type="submit" class="del-btn">削除</button>
-                        </form>
-                    </div>
-                </div>
-            </li>
-            {% else %}
-            <li style="text-align: center; color: #999; margin-top: 20px;">登録されているタスクはありません。</li>
-            {% endfor %}
-        </ul>
-        
-        <div class="opinion-section">
-            <h3>📩 開発者（優作）への意見箱</h3>
-            <form action="/suggest" method="POST" style="background:none; border:none; padding:0; margin:0;">
-                <textarea name="opinion" placeholder="アプリへの要望やバグ報告など何でもどうぞ！" required></textarea>
-                <button type="submit" class="opinion-submit">送信する</button>
-            </form>
-        </div>
+<div class="container">
+    <div id="notification-banner" class="notification-banner">
+        <p style="margin: 0 0 10px 0; font-size: 14px; color: #004085; font-weight: bold;">📢 期限切れ前にスマホにピコンと通知を受け取りますか？</p>
+        <button id="enable-notification" class="notify-btn">通知を受け取る 🔔</button>
     </div>
 
-    <script>
-        function toggleOtherInput() {
-            const select = document.getElementById('subjectSelect');
-            const container = document.getElementById('otherInputContainer');
-            const customInput = document.getElementById('customSubject');
-            
-            if (select.value === 'その他') {
-                container.style.display = 'block';
-                customInput.required = true;
-            } else {
-                container.style.display = 'none';
-                customInput.required = false;
-                customInput.value = '';
+    <div class="user-info">
+        👤 <strong>{{ username }}</strong> さんとしてログイン中
+        <a href="/logout" class="logout-btn">ログアウト</a>
+    </div>
+
+    <h1>📝 課題・タスク管理 Ver 1.2.0</h1>
+
+    <form action="/add" method="POST">
+        <input type="text" name="task" placeholder="何をする？（例: 古文の課題）" required>
+        <input type="date" name="deadline" required>
+        <select name="subject" required>
+            <option value="" disabled selected>教科を選択</option>
+            <option value="国語">国語</option>
+            <option value="数学">数学</option>
+            <option value="英語">英語</option>
+            <option value="理科">理科</option>
+            <option value="社会">社会</option>
+            <option value="その他">その他</option>
+        </select>
+        <button type="submit" class="add-btn">＋ タスクを追加</button>
+    </form>
+
+    <ul class="task-list">
+        {% for task in tasks %}
+        <li class="task-item {% if task.status == 'done' %}done{% endif %}">
+            <div class="task-info">
+                <div class="task-text">{{ task.text }}</div>
+                <div class="task-meta">
+                    <span class="badge">{{ task.subject }}</span>
+                    📅 期限: {{ task.deadline }} 
+                    {% if task.status == 'yet' %}
+                        {% if task.days_left == 0 %}
+                            <span class="alert-text">(今日が期限！🚨)</span>
+                        {% elif task.days_left == 1 %}
+                            <span class="alert-text">(明日が期限！⚠️)</span>
+                        {% elif task.days_left > 1 %}
+                            <span>(あと {{ task.days_left }} 日)</span>
+                        {% else %}
+                            <span class="alert-text">(期限を過ぎています！☠️)</span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            <div class="actions">
+                {% if task.status == 'yet' %}
+                <form action="/complete" method="POST" style="margin:0; padding:0; background:none;">
+                    <input type="hidden" name="task_value" value="{{ task.text }}">
+                    <input type="hidden" name="task_deadline" value="{{ task.deadline }}">
+                    <button type="submit" class="action-btn comp-btn">完了</button>
+                </form>
+                {% endif %}
+                <form action="/delete" method="POST" style="margin:0; padding:0; background:none;">
+                    <input type="hidden" name="task_value" value="{{ task.text }}">
+                    <input type="hidden" name="task_deadline" value="{{ task.deadline }}">
+                    <button type="submit" class="action-btn del-btn">削除</button>
+                </form>
+            </div>
+        </li>
+        {% else %}
+        <li style="text-align: center; color: #94a3b8; padding: 20px;">タスクはすべて完了しています！✨</li>
+        {% endfor %}
+    </ul>
+
+    <div class="suggest-section">
+        <div class="suggest-title">🚀 アプリへの要望・意見箱（優作に届きます）</div>
+        <form action="/suggest" method="POST" style="margin:0; padding:0; background:none; display:block;">
+            <div class="suggest-box">
+                <input type="text" name="opinion" class="suggest-input" placeholder="ここが使いにくい、こんな機能がほしい！" required>
+                <button type="submit" class="suggest-btn">送信</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // 公開用の鍵（VAPID Public Key）。ステップ3で本物の鍵をここに貼り付けます。今はダミーです。
+    const VAPID_PUBLIC_KEY = "YOUR_PUBLIC_VAPID_KEY_HERE";
+
+    // 画面が開いたときに、通知の許可状態をチェックする
+    document.addEventListener("DOMContentLoaded", () => {
+        if ("Notification" in window && "serviceWorker" in window) {
+            // まだ通知の許可も拒否もしていない場合、案内バナーを表示する
+            if (Notification.permission === "default") {
+                document.getElementById("notification-banner").style.display = "block";
             }
         }
+    });
 
-        // 送信直前に、「その他」の自由入力文字をセレクトボックスの値として書き換えて金庫に送る処理
-        document.getElementById('taskForm').addEventListener('submit', function(e) {
-            const select = document.getElementById('subjectSelect');
-            const customInput = document.getElementById('customSubject');
+    // 「通知を受け取る」ボタンが押されたときの処理
+    document.getElementById("enable-notification").addEventListener("click", async () => {
+        const banner = document.getElementById("notification-banner");
+        
+        // スマホ本体の通知許可ダイアログを出す
+        const permission = await Notification.requestPermission();
+        
+        if (permission === "granted") {
+            alert("通知が許可されました！🎉 次のステップで通知テストが可能になります。");
+            banner.style.display = "none";
             
-            if (select.value === 'その他' && customInput.value.trim() !== '') {
-                // セレクトボックスに新しい選択肢を無理やり作って上書きする
-                const newOpt = document.createElement('option');
-                newOpt.value = customInput.value.trim();
-                newOpt.selected = true;
-                select.appendChild(newOpt);
-            }
-        });
-    </script>
+            // サービスワーカー（裏方のプログラム）を登録して、鍵をPythonに送る
+            configurePushSubscription();
+        } else {
+            alert("通知が拒否されました。設定アプリから変更できます。");
+            banner.style.display = "none";
+        }
+    });
+
+    // スマホ専用の「通知の鍵」を生成してPythonに送る関数
+    async function configurePushSubscription() {
+        if (!('serviceWorker' in navigator)) return;
+        
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        
+        if (sub === null) {
+            // 新しくスマホ用の鍵を作る
+            const newSub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+            });
+            
+            // Pythonの金庫（/subscribe）へ送信！
+            await fetch("/subscribe", {
+                method: "POST",
+                body: JSON.stringify(newSub),
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            });
+        }
+    }
+
+    // 鍵の暗号化データを変換するための便利関数
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    }
+
+    // サービスワーカー（裏方ファイル）の登録登録
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/static/service-worker.js')
+        .then(reg => console.log('Service Worker Registered!', reg))
+        .catch(err => console.log('Service Worker Reg Error:', err));
+    }
+</script>
 </body>
 </html>
