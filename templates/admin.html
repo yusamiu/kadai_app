@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理者ページ</title>
+    <style>
+        body { font-family: sans-serif; background: #fafafa; padding: 20px; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1, h2 { color: #8b5a42; }
+        .box { background: #fdf6f0; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #dcc7bd; }
+        input, textarea, button { width: 100%; padding: 10px; margin-top: 5px; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; }
+        button { background: #d97736; color: white; border: none; cursor: pointer; font-weight: bold; }
+        ul { list-style: none; padding: 0; }
+        li { background: #eee; padding: 10px; margin-bottom: 5px; border-radius: 4px; font-size: 14px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>👑 管理者ページ</h1>
+    <a href="/">← アプリに戻る</a>
+    <hr>
+
+    <div class="box">
+        <h2>📢 全体プッシュ通知配信</h2>
+        <form action="/admin-yusaku-xyz777" method="POST">
+            <input type="hidden" name="action" value="broadcast">
+            <label>通知タイトル: <input type="text" name="title" value="管理者からのお知らせ"></label><br><br>
+            <label>通知本文: <textarea name="body" rows="3">これはテスト通知です。</textarea></label><br><br>
+            <button type="submit">全員に通知を送信する</button>
+        </form>
+    </div>
+
+    <div class="box">
+        <h2>📥 届いた意見箱（要望）一覧</h2>
+        <form action="/admin-yusaku-xyz777" method="POST" style="margin-bottom: 10px;">
+            <input type="hidden" name="action" value="clear_suggestions">
+            <button type="submit" style="background: #c0392b;">意見箱をすべて空にする</button>
+        </form>
+        <ul>
+            {% for sug in suggestions %}
+            <li>
+                <strong>{{ sug.username }}</strong> さんから：<br>
+                {{ sug.opinion }} <br>
+                <small style="color: #777;">({{ sug.created_at }})</small>
+            </li>
+            {% else %}
+            <li style="background: none; text-align: center; color: #999;">まだ意見はありません。</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+</body>
+</html>
