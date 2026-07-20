@@ -23,7 +23,7 @@ def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # ユーザーテーブルを作成（まずはパスワードなしでもOKな状態で定義）
+    # ユーザーテーブルを作成
     cur.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -32,12 +32,11 @@ def init_db():
         );
     ''')
     
-    # 💡【超重要】すでに本番DBにある「パスワード必須ルール」を解除する魔法の命令
+    # パスワード必須ルールの解除
     try:
         cur.execute('ALTER TABLE users ALTER COLUMN password DROP NOT NULL;')
         conn.commit()
     except Exception as e:
-        # すでに解除されている場合はエラーになるのでスルーする
         conn.rollback()
 
     # タスクテーブル
@@ -80,7 +79,7 @@ except Exception as e:
     print(f"【DB初期化エラー】: {e}")
 
 # -----------------------------------------------------------------------------
-# 🤖 自動通知システム（物理送信関数）
+# 自動通知システム（物理送信関数）
 # -----------------------------------------------------------------------------
 def send_webpush(subscription_json, title, body):
     private_key = os.environ.get('VAPID_PRIVATE_KEY')
@@ -105,7 +104,7 @@ def send_webpush(subscription_json, title, body):
         return False
 
 # -----------------------------------------------------------------------------
-# 🌐 ルーティング（画面処理）
+# ルーティング（画面処理）
 # -----------------------------------------------------------------------------
 
 @app.route('/')
@@ -124,6 +123,17 @@ def index():
     today = datetime.date.today()
     for row in raw_tasks:
         task_date = row['deadline']
+        
+        # データベースから文字列として取得された場合の型変換（エラー対策）
+        if isinstance(task_date, str):
+            try:
+                task_date = datetime.datetime.strptime(task_date, '%Y-%m-%d').date()
+            except ValueError:
+                try:
+                    task_date = datetime.datetime.strptime(task_date.split()[0], '%Y-%m-%d').date()
+                except Exception:
+                    task_date = today
+
         days_left = (task_date - today).days
         tasks.append({
             'text': row['text'],
@@ -153,11 +163,11 @@ def login():
         user = cur.fetchone()
         
         if not user:
-            # 存在しない名前なら、その場で新しく登録する（パスワードは自動で空っぽになる）
+            # 存在しない名前なら、その場で新しく登録する
             cur.execute('INSERT INTO users (username) VALUES (%s)', (username,))
             conn.commit()
             
-        # セッションに名前を保存してログイン完了！
+        # セッションに名前を保存してログイン完了
         session['username'] = username
         cur.close()
         conn.close()
@@ -247,7 +257,7 @@ def suggest():
     return redirect(url_for('index'))
 
 # -----------------------------------------------------------------------------
-# 📲 通知デバイス登録用API受取口
+# 通知デバイス登録用API受取口
 # -----------------------------------------------------------------------------
 @app.route('/subscribe', methods=['POST'])
 def subscribe():
@@ -274,7 +284,7 @@ def subscribe():
         conn.close()
 
 # -----------------------------------------------------------------------------
-# 👑 管理者用隠し部屋
+# 管理者用隠し部屋
 # -----------------------------------------------------------------------------
 @app.route('/admin-yusaku-xyz777', methods=['GET', 'POST'])
 def admin_page():
@@ -310,7 +320,7 @@ def admin_page():
     return render_template('admin.html', suggestions=all_suggestions)
 
 # -----------------------------------------------------------------------------
-# 🌟 完全無料の自動通知キッカケ（UptimeRobot用）
+# 完全無料の自動通知キッカケ（UptimeRobot用）
 # -----------------------------------------------------------------------------
 @app.route('/cron-yusaku-trigger-999')
 def cron_trigger():
