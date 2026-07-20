@@ -1,0 +1,21 @@
+{
+  "short_name": "タスク管理",
+  "name": "タスク管理アプリ",
+  "icons": [
+    {
+      "src": "/static/icon.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/static/icon.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#fff9f5",
+  "theme_color": "#e67e22",
+  "display": "standalone",
+  "orientation": "portrait"
+}

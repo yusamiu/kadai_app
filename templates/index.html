@@ -8,60 +8,246 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="タスク管理">
+    
     <link rel="manifest" href="/static/manifest.json">
     <link rel="apple-touch-icon" href="/static/icon.png">
 
     <style>
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f4f8; margin: 0; padding: 20px; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
-        h1 { font-size: 24px; color: #2c3e50; margin-top: 0; text-align: center; }
+        /* 全体の背景と文字色を以前の暖色系に完全復元 */
+        body { 
+            font-family: 'Helvetica Neue', Arial, sans-serif; 
+            background-color: #fff9f5; 
+            margin: 0; 
+            padding: 20px; 
+            color: #4a3e3d; 
+        }
         
-        /* 🔔 【新設】通知ボタンのスタイル */
-        .notification-banner { background: #e8f4fd; border: 1px solid #b3d7ff; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; display: none; }
-        .notify-btn { background: #007bff; color: white; border: none; padding: 10px 20px; font-size: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
-        .notify-btn:hover { background: #0056b3; }
+        /* メインコンテナの装飾（影の色も暖色系に調整） */
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: #ffffff; 
+            padding: 30px; 
+            border-radius: 16px; 
+            box-shadow: 0 4px 20px rgba(180, 140, 120, 0.15); 
+        }
         
-        .user-info { text-align: right; font-size: 14px; color: #7f8c8d; margin-bottom: 20px; }
-        .logout-btn { color: #e74c3c; text-decoration: none; margin-left: 10px; }
-        form { display: grid; gap: 12px; margin-bottom: 30px; background: #f8fafc; padding: 20px; border-radius: 12px; }
-        input, select, button { padding: 12px; font-size: 16px; border: 1px solid #cbd5e1; border-radius: 8px; }
-        button.add-btn { background: #10b981; color: white; border: none; font-weight: bold; cursor: pointer; }
-        button.add-btn:hover { background: #059669; }
-        .task-list { list-style: none; padding: 0; }
-        .task-item { background: white; padding: 16px; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border-left: 5px solid #3b82f6; display: flex; justify-content: space-between; align-items: center; }
-        .task-item.done { border-left-color: #cbd5e1; opacity: 0.6; }
-        .task-item.done .task-text { text-decoration: line-through; color: #94a3b8; }
-        .task-info { flex-grow: 1; }
-        .task-text { font-weight: bold; font-size: 16px; margin-bottom: 4px; }
-        .task-meta { font-size: 12px; color: #64748b; }
-        .badge { background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 6px; font-weight: bold; margin-right: 6px; }
-        .alert-text { color: #ef4444; font-weight: bold; }
-        .actions { display: flex; gap: 8px; }
-        .action-btn { border: none; padding: 8px 12px; font-size: 13px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-        .comp-btn { background: #d1fae5; color: #065f46; }
-        .del-btn { background: #fee2e2; color: #991b1b; }
+        /* メインタイトルのデザイン */
+        h1 { 
+            font-size: 24px; 
+            color: #8b5a42; 
+            margin-top: 0; 
+            text-align: center; 
+        }
         
-        .suggest-section { margin-top: 4px; padding-top: 20px; border-top: 1px dashed #cbd5e1; }
-        .suggest-title { font-size: 14px; font-weight: bold; color: #64748b; margin-bottom: 8px; }
-        .suggest-box { display: flex; gap: 8px; }
-        .suggest-input { flex-grow: 1; padding: 8px 12px; font-size: 14px; }
-        .suggest-btn { background: #64748b; color: white; border: none; padding: 8px 16px; font-size: 14px; border-radius: 8px; cursor: pointer; }
+        /* 通知案内バナー（視認性の高い暖色系の警告色） */
+        .notification-banner { 
+            background-color: #fff3cd; 
+            border: 1px solid #ffeeba; 
+            padding: 15px; 
+            border-radius: 12px; 
+            margin-bottom: 20px; 
+            text-align: center; 
+            display: none; 
+        }
+        
+        /* 通知有効化ボタン */
+        .notify-btn { 
+            background-color: #d97736; 
+            color: #ffffff; 
+            border: none; 
+            padding: 10px 20px; 
+            font-size: 14px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            transition: background-color 0.2s; 
+        }
+        .notify-btn:hover { 
+            background-color: #c25f23; 
+        }
+        
+        /* ユーザー情報表示領域 */
+        .user-info { 
+            text-align: right; 
+            font-size: 14px; 
+            color: #8a7a78; 
+            margin-bottom: 20px; 
+        }
+        
+        /* ログアウトリンク */
+        .logout-btn { 
+            color: #c0392b; 
+            text-decoration: none; 
+            margin-left: 10px; 
+        }
+        
+        /* タスク追加入力フォーム */
+        form { 
+            display: grid; 
+            gap: 12px; 
+            margin-bottom: 30px; 
+            background-color: #fdf6f0; 
+            padding: 20px; 
+            border-radius: 12px; 
+        }
+        
+        input, select, button { 
+            padding: 12px; 
+            font-size: 16px; 
+            border: 1px solid #dcc7bd; 
+            border-radius: 8px; 
+            background-color: #ffffff; 
+            color: #4a3e3d; 
+        }
+        
+        /* 追加ボタンの暖色系設定 */
+        button.add-btn { 
+            background-color: #e67e22; 
+            color: #ffffff; 
+            border: none; 
+            font-weight: bold; 
+            cursor: pointer; 
+        }
+        button.add-btn:hover { 
+            background-color: #d35400; 
+        }
+        
+        /* タスクリスト表示領域 */
+        .task-list { 
+            list-style: none; 
+            padding: 0; 
+        }
+        
+        /* 未完了タスク（左端にオレンジのアクセントライン） */
+        .task-item { 
+            background-color: #ffffff; 
+            padding: 16px; 
+            border-radius: 12px; 
+            margin-bottom: 12px; 
+            box-shadow: 0 2px 8px rgba(180, 140, 120, 0.08); 
+            border-left: 5px solid #e67e22; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        
+        /* 完了済みタスクのグレーアウト表現 */
+        .task-item.done { 
+            border-left-color: #dcc7bd; 
+            opacity: 0.6; 
+        }
+        .task-item.done .task-text { 
+            text-decoration: line-through; 
+            color: #a1928f; 
+        }
+        
+        .task-info { 
+            flex-grow: 1; 
+        }
+        
+        .task-text { 
+            font-weight: bold; 
+            font-size: 16px; 
+            margin-bottom: 4px; 
+        }
+        
+        .task-meta { 
+            font-size: 12px; 
+            color: #8a7a78; 
+        }
+        
+        /* 教科タグの暖色系バッジ */
+        .badge { 
+            background-color: #faebd7; 
+            color: #b86b32; 
+            padding: 2px 8px; 
+            border-radius: 6px; 
+            font-weight: bold; 
+            margin-right: 6px; 
+        }
+        
+        /* 警告文の赤色表記 */
+        .alert-text { 
+            color: #c0392b; 
+            font-weight: bold; 
+        }
+        
+        /* 操作ボタン領域 */
+        .actions { 
+            display: flex; 
+            gap: 8px; 
+        }
+        
+        .action-btn { 
+            border: none; 
+            padding: 8px 12px; 
+            font-size: 13px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: bold; 
+        }
+        
+        .comp-btn { 
+            background-color: #e8f8f5; 
+            color: #117a65; 
+        }
+        
+        .del-btn { 
+            background-color: #fadbd8; 
+            color: #78281f; 
+        }
+        
+        /* 意見箱セクション */
+        .suggest-section { 
+            margin-top: 4px; 
+            padding-top: 20px; 
+            border-top: 1px dashed #dcc7bd; 
+        }
+        
+        .suggest-title { 
+            font-size: 14px; 
+            font-weight: bold; 
+            color: #8a7a78; 
+            margin-bottom: 8px; 
+        }
+        
+        .suggest-box { 
+            display: flex; 
+            gap: 8px; 
+        }
+        
+        .suggest-input { 
+            flex-grow: 1; 
+            padding: 8px 12px; 
+            font-size: 14px; 
+        }
+        
+        .suggest-btn { 
+            background-color: #8a7a78; 
+            color: #ffffff; 
+            border: none; 
+            padding: 8px 16px; 
+            font-size: 14px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div id="notification-banner" class="notification-banner">
-        <p style="margin: 0 0 10px 0; font-size: 14px; color: #004085; font-weight: bold;">📢 期限切れ前にスマホにピコンと通知を受け取りますか？</p>
-        <button id="enable-notification" class="notify-btn">通知を受け取る 🔔</button>
+        <p style="margin: 0 0 10px 0; font-size: 14px; color: #856404; font-weight: bold;">期限切れ前にスマホに通知を受け取りますか？</p>
+        <button id="enable-notification" class="notify-btn">通知を受け取る</button>
     </div>
 
     <div class="user-info">
-        👤 <strong>{{ username }}</strong> さんとしてログイン中
+        ユーザー: <strong>{{ username }}</strong> さんとしてログイン中
         <a href="/logout" class="logout-btn">ログアウト</a>
     </div>
 
-    <h1>📝 課題・タスク管理 Ver 1.2.0</h1>
+    <h1>タスク管理アプリ</h1>
 
     <form action="/add" method="POST">
         <input type="text" name="task" placeholder="何をする？（例: 古文の課題）" required>
@@ -85,16 +271,16 @@
                 <div class="task-text">{{ task.text }}</div>
                 <div class="task-meta">
                     <span class="badge">{{ task.subject }}</span>
-                    📅 期限: {{ task.deadline }} 
+                    期限: {{ task.deadline }} 
                     {% if task.status == 'yet' %}
                         {% if task.days_left == 0 %}
-                            <span class="alert-text">(今日が期限！🚨)</span>
+                            <span class="alert-text">(今日が期限です)</span>
                         {% elif task.days_left == 1 %}
-                            <span class="alert-text">(明日が期限！⚠️)</span>
+                            <span class="alert-text">(明日が期限です)</span>
                         {% elif task.days_left > 1 %}
                             <span>(あと {{ task.days_left }} 日)</span>
                         {% else %}
-                            <span class="alert-text">(期限を過ぎています！☠️)</span>
+                            <span class="alert-text">(期限を過ぎています)</span>
                         {% endif %}
                     {% endif %}
                 </div>
@@ -115,15 +301,15 @@
             </div>
         </li>
         {% else %}
-        <li style="text-align: center; color: #94a3b8; padding: 20px;">タスクはすべて完了しています！✨</li>
+        <li style="text-align: center; color: #a1928f; padding: 20px;">タスクはすべて完了しています。</li>
         {% endfor %}
     </ul>
 
     <div class="suggest-section">
-        <div class="suggest-title">🚀 アプリへの要望・意見箱（優作に届きます）</div>
+        <div class="suggest-title">アプリへの要望・意見箱（管理者に届きます）</div>
         <form action="/suggest" method="POST" style="margin:0; padding:0; background:none; display:block;">
             <div class="suggest-box">
-                <input type="text" name="opinion" class="suggest-input" placeholder="ここが使いにくい、こんな機能がほしい！" required>
+                <input type="text" name="opinion" class="suggest-input" placeholder="ここが使いにくい、こんな機能がほしいなど" required>
                 <button type="submit" class="suggest-btn">送信</button>
             </div>
         </form>
@@ -131,39 +317,34 @@
 </div>
 
 <script>
-    // 公開用の鍵（VAPID Public Key）。ステップ3で本物の鍵をここに貼り付けます。今はダミーです。
+    // 注意: 実際の配信機能にはVAPIDパブリックキーの生成と配置が必要です。現在は初期化可能なダミー値を設定しています。
     const VAPID_PUBLIC_KEY = "YOUR_PUBLIC_VAPID_KEY_HERE";
 
-    // 画面が開いたときに、通知の許可状態をチェックする
+    // ブラウザの互換性チェックおよびバナー初期表示制御
     document.addEventListener("DOMContentLoaded", () => {
         if ("Notification" in window && "serviceWorker" in window) {
-            // まだ通知の許可も拒否もしていない場合、案内バナーを表示する
             if (Notification.permission === "default") {
                 document.getElementById("notification-banner").style.display = "block";
             }
         }
     });
 
-    // 「通知を受け取る」ボタンが押されたときの処理
+    // ユーザーインタラクションに基づく通知許可申請
     document.getElementById("enable-notification").addEventListener("click", async () => {
         const banner = document.getElementById("notification-banner");
-        
-        // スマホ本体の通知許可ダイアログを出す
         const permission = await Notification.requestPermission();
         
         if (permission === "granted") {
-            alert("通知が許可されました！🎉 次のステップで通知テストが可能になります。");
+            alert("通知が許可されました。");
             banner.style.display = "none";
-            
-            // サービスワーカー（裏方のプログラム）を登録して、鍵をPythonに送る
             configurePushSubscription();
         } else {
-            alert("通知が拒否されました。設定アプリから変更できます。");
+            alert("通知が拒否されました。設定から変更できます。");
             banner.style.display = "none";
         }
     });
 
-    // スマホ専用の「通知の鍵」を生成してPythonに送る関数
+    // プッシュサブスクリプションオブジェクトの生成とサーバー送信
     async function configurePushSubscription() {
         if (!('serviceWorker' in navigator)) return;
         
@@ -171,24 +352,26 @@
         const sub = await reg.pushManager.getSubscription();
         
         if (sub === null) {
-            // 新しくスマホ用の鍵を作る
-            const newSub = await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-            });
-            
-            // Pythonの金庫（/subscribe）へ送信！
-            await fetch("/subscribe", {
-                method: "POST",
-                body: JSON.stringify(newSub),
-                headers: {
-                    "Content-Type": "application/json"
-                }
-            });
+            try {
+                const newSub = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                });
+                
+                await fetch("/subscribe", {
+                    method: "POST",
+                    body: JSON.stringify(newSub),
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+            } catch (error) {
+                console.error("Subscription failed:", error);
+            }
         }
     }
 
-    // 鍵の暗号化データを変換するための便利関数
+    // 鍵データ変換ユーティリティ
     function urlBase64ToUint8Array(base64String) {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
         const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -200,7 +383,7 @@
         return outputArray;
     }
 
-    // サービスワーカー（裏方ファイル）の登録登録
+    // サービスワーカーファイルの登録実行
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/static/service-worker.js')
         .then(reg => console.log('Service Worker Registered!', reg))
