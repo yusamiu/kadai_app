@@ -63,7 +63,7 @@ def init_db():
     cur.close()
     conn.close()
 
-# 💡 Render起動時（モジュール読み込み時）に安全に1度だけDBを初期化する方式に変更
+# Render起動時に安全に1度だけDBを初期化する
 try:
     init_db()
 except Exception as e:
@@ -131,24 +131,33 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        # 💡 エラー回避対策：データの受け取り方をより安全な方式（.get）に変更
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        if not username or not password:
+            return "ユーザー名とパスワードを入力してください。", 400
         
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=DictCursor)
-        cur.execute('SELECT * FROM users WHERE username = %s AND password = %s', (username, password))
+        
+        # まずユーザーが存在するか確認
+        cur.execute('SELECT * FROM users WHERE username = %s', (username,))
         user = cur.fetchone()
         
         if user:
-            session['username'] = username
-            cur.close()
-            conn.close()
-            return redirect(url_for('index'))
-        
-        # ユーザーがいない場合は自動で新規登録させる
-        cur.execute('SELECT * FROM users WHERE username = %s', (username,))
-        exist_user = cur.fetchone()
-        if not exist_user:
+            # パスワードが一致すればログイン成功
+            if user['password'] == password:
+                session['username'] = username
+                cur.close()
+                conn.close()
+                return redirect(url_for('index'))
+            else:
+                cur.close()
+                conn.close()
+                return "ログイン失敗: パスワードが違います。"
+        else:
+            # ユーザーが存在しない場合は自動で新規登録
             cur.execute('INSERT INTO users (username, password) VALUES (%s, %s)', (username, password))
             conn.commit()
             session['username'] = username
@@ -156,10 +165,6 @@ def login():
             conn.close()
             return redirect(url_for('index'))
             
-        cur.close()
-        conn.close()
-        return "ログイン失敗: パスワードが違います。"
-        
     return render_template('login.html')
 
 @app.route('/logout')
@@ -173,9 +178,9 @@ def add_task():
         return redirect(url_for('login'))
     
     username = session['username']
-    task_text = request.form['task']
-    deadline = request.form['deadline']
-    subject = request.form['subject']
+    task_text = request.form.get('task', '')
+    deadline = request.form.get('deadline', '')
+    subject = request.form.get('subject', '')
     
     conn = get_db_connection()
     cur = conn.cursor()
@@ -194,8 +199,8 @@ def complete_task():
         return redirect(url_for('login'))
         
     username = session['username']
-    task_value = request.form['task_value']
-    task_deadline = request.form['task_deadline']
+    task_value = request.form.get('task_value', '')
+    task_deadline = request.form.get('task_deadline', '')
     
     conn = get_db_connection()
     cur = conn.cursor()
@@ -214,8 +219,8 @@ def delete_task():
         return redirect(url_for('login'))
         
     username = session['username']
-    task_value = request.form['task_value']
-    task_deadline = request.form['task_deadline']
+    task_value = request.form.get('task_value', '')
+    task_deadline = request.form.get('task_deadline', '')
     
     conn = get_db_connection()
     cur = conn.cursor()
@@ -233,7 +238,7 @@ def suggest():
     if 'username' not in session:
         return redirect(url_for('login'))
     username = session['username']
-    opinion = request.form['opinion']
+    opinion = request.form.get('opinion', '')
     
     conn = get_db_connection()
     cur = conn.cursor()
