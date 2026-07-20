@@ -1,332 +1,366 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-from datetime import datetime, timedelta
 import os
 import psycopg2
 from psycopg2.extras import DictCursor
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+import datetime
+from urllib.parse import urlparse
+from pywebpush import webpush, WebPushException
 import json
+import threading
+import time
 
 app = Flask(__name__)
-app.secret_key = 'yusaku_secret_key_12345'
+app.secret_key = 'super-secret-key-yusaku'
 
-# --------------------------------------------------
-# 🔑 Renderの金庫（データベース）に接続する関数
-# --------------------------------------------------
+# データベース接続関数
 def get_db_connection():
-    database_url = os.environ.get('DATABASE_URL')
+    database_url = os.environ.get('DATABASE_URL', 'postgres://localhost/kadai_app')
     conn = psycopg2.connect(database_url, sslmode='require')
     return conn
 
-# --------------------------------------------------
-# 🏗️ アプリ起動時に、金庫の中に「引き出し（テーブル）」を作る
-# --------------------------------------------------
+# データベースの初期化
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
-    
-    # タスク保存用
+    # ユーザーテーブル
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+        );
+    ''')
+    # タスクテーブル
     cur.execute('''
         CREATE TABLE IF NOT EXISTS tasks (
             id SERIAL PRIMARY KEY,
             username TEXT NOT NULL,
             text TEXT NOT NULL,
-            deadline TEXT NOT NULL,
+            deadline DATE NOT NULL,
             subject TEXT NOT NULL,
-            status TEXT NOT NULL
+            status TEXT NOT NULL DEFAULT 'yet'
         );
     ''')
-    
-    # 意見箱用
+    # 意見箱テーブル
     cur.execute('''
-        CREATE TABLE IF NOT EXISTS opinions (
-            id SERIAL PRIMARY KEY,
-            created_at TEXT NOT NULL,
-            text TEXT NOT NULL
-        );
-    ''')
-    
-    # 🔔 【新設】スマホ通知のトークン（送り先の鍵）を保存する用
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+        CREATE TABLE IF NOT EXISTS suggestions (
             id SERIAL PRIMARY KEY,
             username TEXT NOT NULL,
-            subscription_json TEXT NOT NULL,
+            opinion TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     ''')
-    
+    # プッシュ通知の購読情報テーブル
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS subscriptions (
+            id SERIAL PRIMARY KEY,
+            username TEXT NOT NULL,
+            subscription_json TEXT NOT NULL,
+            UNIQUE(username, subscription_json)
+        );
+    ''')
     conn.commit()
     cur.close()
     conn.close()
 
-init_db()
+# -----------------------------------------------------------------------------
+# 🤖 自動通知システム（バックグラウンドで毎日自動実行する仕組み）
+# -----------------------------------------------------------------------------
+def send_webpush(subscription_json, title, body):
+    """個別のスマホへ通知を物理的に送信する共通関数"""
+    private_key = os.environ.get('VAPID_PRIVATE_KEY')
+    if not private_key:
+        print("【エラー】Renderの環境変数に VAPID_PRIVATE_KEY が設定されていません。")
+        return False
+        
+    try:
+        subscription_data = json.loads(subscription_json)
+        webpush(
+            subscription_info=subscription_data,
+            data=json.dumps({"title": title, "body": body}),
+            vapid_private_key=private_key,
+            vapid_claims={"sub": "mailto:yusaku@example.com"}
+        )
+        return True
+    except WebPushException as ex:
+        print(f"【通知送信失敗】端末側で解除された可能性があります: {ex}")
+        return False
+    except Exception as e:
+        print(f"【予期せぬエラー】: {e}")
+        return False
 
-# 💡 リクエストが来るたびに「ログイン状態を30日維持する」を設定する安全な記述法
-@app.before_request
-def make_session_permanent():
-    session.permanent = True
-    app.permanent_session_lifetime = timedelta(days=30)
+def auto_notification_cron():
+    """24時間いつでも裏で待機し、毎日指定の時間に1日前タスクを自動通知する関数"""
+    print("⏰ 自動通知システム（24時間監視）がバックグラウンドで起動しました。")
+    while True:
+        try:
+            # 現在の時刻を取得
+            now = datetime.datetime.now()
+            
+            # 🎯 通知を送りたい時間を設定（例: 毎朝 08:00 に自動送信）
+            # テスト時はここを現在の時間に近い分に変更することも可能です
+            if now.hour == 8 and now.minute == 0:
+                print("📅 朝8時になりました。期限1日前のタスクを自動チェックします...")
+                
+                # 明日の日付を計算
+                tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+                
+                conn = get_db_connection()
+                cur = conn.cursor(cursor_factory=DictCursor)
+                
+                # 「明日が期限」かつ「未完了(yet)」のタスクと、その所有者をまとめて取得
+                cur.execute('''
+                    SELECT username, text, subject 
+                    FROM tasks 
+                    WHERE deadline = %s AND status = 'yet'
+                ''', (tomorrow,))
+                tomorrow_tasks = cur.fetchall()
+                
+                for task in tomorrow_tasks:
+                    target_user = task['username']
+                    task_title = task['text']
+                    subject_name = task['subject']
+                    
+                    # そのユーザーのスマホの登録情報（購読鍵）をすべて取得
+                    cur.execute('SELECT subscription_json FROM subscriptions WHERE username = %s', (target_user,))
+                    subs = cur.fetchall()
+                    
+                    # 通知メッセージの組み立て（優作さんの理想の形）
+                    notification_title = "タスク管理アプリ"
+                    notification_body = f"「{subject_name}」の「{task_title}」の期限が明日に迫っています！"
+                    
+                    for sub in subs:
+                        send_webpush(sub['subscription_json'], notification_title, notification_body)
+                        print(f"🚀 {target_user} さん宛てに自動通知を送出しました: {task_title}")
+                        
+                conn.close()
+                # 連投を防ぐために1分間スリープ
+                time.sleep(60)
+                
+        except Exception as e:
+            print(f"【自動通知システム内エラー】: {e}")
+            
+        # 30秒ごとに時間をチェックする
+        time.sleep(30)
 
-# --------------------------------------------------
-# 🏠 メイン画面（ホーム部屋）
-# --------------------------------------------------
+# アプリ起動時に、裏側で自動通知タイマーを別行動でスタートさせる
+notification_thread = threading.Thread(target=auto_notification_cron, daemon=True)
+notification_thread.start()
+
+# -----------------------------------------------------------------------------
+# 🌐 画面遷移・WEBページの処理（ルーティング）
+# -----------------------------------------------------------------------------
+
 @app.route('/')
-def home():
+def index():
     if 'username' not in session:
-        return redirect(url_for('login_page'))
+        return redirect(url_for('login'))
     
-    current_user = session['username']
-    
+    username = session['username']
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=DictCursor)
-    cur.execute(
-        "SELECT username, text, deadline, subject, status FROM tasks WHERE username = %s ORDER BY deadline ASC",
-        (current_user,)
-    )
-    db_tasks = cur.fetchall()
-    cur.close()
-    conn.close()
     
-    user_tasks = []
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    cur.execute('SELECT * FROM tasks WHERE username = %s ORDER BY deadline ASC', (username,))
+    raw_tasks = cur.fetchall()
     
-    for t in db_tasks:
-        try:
-            deadline_date = datetime.strptime(t['deadline'], '%Y-%m-%d')
-            days_left = (deadline_date - today).days
-        except:
-            days_left = 0
-            
-        user_tasks.append({
-            'username': t['username'],
-            'text': t['text'],
-            'deadline': t['deadline'],
-            'subject': t['subject'],
-            'status': t['status'],
+    tasks = []
+    today = datetime.date.today()
+    for row in raw_tasks:
+        task_date = row['deadline']
+        days_left = (task_date - today).days
+        tasks.append({
+            'text': row['text'],
+            'deadline': task_date.isoformat(),
+            'subject': row['subject'],
+            'status': row['status'],
             'days_left': days_left
         })
-    
-    return render_template('index.html', username=current_user, tasks=user_tasks)
+        
+    cur.close()
+    conn.close()
+    return render_template('index.html', username=username, tasks=tasks)
 
-# --------------------------------------------------
-# 🔑 ログイン画面
-# --------------------------------------------------
 @app.route('/login', methods=['GET', 'POST'])
-def login_page():
-    if 'username' in session:
-        return redirect(url_for('home'))
-
+def login():
     if request.method == 'POST':
-        username = request.form.get('username')
-        if username:
-            session['username'] = username.strip()
-            return redirect(url_for('home'))
+        username = request.form['username']
+        password = request.form['password']
+        
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=DictCursor)
+        cur.execute('SELECT * FROM users WHERE username = %s AND password = %s', (username, password))
+        user = cur.fetchone()
+        
+        if user:
+            session['username'] = username
+            cur.close()
+            conn.close()
+            return redirect(url_for('index'))
+        
+        # ユーザーがいない場合は自動で新規登録させる親切設計
+        cur.execute('SELECT * FROM users WHERE username = %s', (username,))
+        exist_user = cur.fetchone()
+        if not exist_user:
+            cur.execute('INSERT INTO users (username, password) VALUES (%s, %s)', (username, password))
+            conn.commit()
+            session['username'] = username
+            cur.close()
+            conn.close()
+            return redirect(url_for('index'))
+            
+        cur.close()
+        conn.close()
+        return "ログイン失敗: パスワードが違います。"
+        
     return render_template('login.html')
 
-# --------------------------------------------------
-# 🚪 ログアウト処理
-# --------------------------------------------------
 @app.route('/logout')
 def logout():
     session.pop('username', None)
-    return redirect(url_for('login_page'))
+    return redirect(url_for('login'))
 
-# --------------------------------------------------
-# ➕ 課題の追加
-# --------------------------------------------------
 @app.route('/add', methods=['POST'])
 def add_task():
     if 'username' not in session:
-        return redirect(url_for('login_page'))
+        return redirect(url_for('login'))
     
-    task_text = request.form.get('task')
-    deadline = request.form.get('deadline')
-    subject = request.form.get('subject')
+    username = session['username']
+    task_text = request.form['task']
+    deadline = request.form['deadline']
+    subject = request.form['subject']
     
-    if task_text and deadline and subject:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO tasks (username, text, deadline, subject, status) VALUES (%s, %s, %s, %s, %s)",
-            (session['username'], task_text, deadline, subject, 'yet')
-        )
-        conn.commit()
-        cur.close()
-        conn.close()
-        
-    return redirect(url_for('home'))
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        'INSERT INTO tasks (username, text, deadline, subject, status) VALUES (%s, %s, %s, %s, %s)',
+        (username, task_text, deadline, subject, 'yet')
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return redirect(url_for('index'))
 
-# --------------------------------------------------
-# ✅ 課題の完了
-# --------------------------------------------------
 @app.route('/complete', methods=['POST'])
 def complete_task():
     if 'username' not in session:
-        return redirect(url_for('login_page'))
-    
-    task_value = request.form.get('task_value')
-    task_deadline = request.form.get('task_deadline')
+        return redirect(url_for('login'))
+        
+    username = session['username']
+    task_value = request.form['task_value']
+    task_deadline = request.form['task_deadline']
     
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
         "UPDATE tasks SET status = 'done' WHERE username = %s AND text = %s AND deadline = %s",
-        (session['username'], task_value, task_deadline)
+        (username, task_value, task_deadline)
     )
     conn.commit()
     cur.close()
     conn.close()
-    return redirect(url_for('home'))
+    return redirect(url_for('index'))
 
-# --------------------------------------------------
-# ❌ 課題の削除
-# --------------------------------------------------
 @app.route('/delete', methods=['POST'])
 def delete_task():
     if 'username' not in session:
-        return redirect(url_for('login_page'))
-    
-    task_value = request.form.get('task_value')
-    task_deadline = request.form.get('task_deadline')
+        return redirect(url_for('login'))
+        
+    username = session['username']
+    task_value = request.form['task_value']
+    task_deadline = request.form['task_deadline']
     
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
         "DELETE FROM tasks WHERE username = %s AND text = %s AND deadline = %s",
-        (session['username'], task_value, task_deadline)
+        (username, task_value, task_deadline)
     )
     conn.commit()
     cur.close()
     conn.close()
-    return redirect(url_for('home'))
+    return redirect(url_for('index'))
 
-# --------------------------------------------------
-# 📩 意見箱の送信
-# --------------------------------------------------
 @app.route('/suggest', methods=['POST'])
 def suggest():
-    opinion_text = request.form.get('opinion')
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    username = session['username']
+    opinion = request.form['opinion']
     
-    if opinion_text:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
-        cur.execute(
-            "INSERT INTO opinions (created_at, text) VALUES (%s, %s)",
-            (now_str, opinion_text.strip())
-        )
-        conn.commit()
-        cur.close()
-        conn.close()
-            
-    return redirect(url_for('home'))
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('INSERT INTO suggestions (username, opinion) VALUES (%s, %s)', (username, opinion))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return redirect(url_for('index'))
 
-# --------------------------------------------------
-# 🔔 【新設】スマホの「通知の鍵」を金庫に保存するエンドポイント
-# --------------------------------------------------
+# -----------------------------------------------------------------------------
+# 📲 通知デバイス登録用API受取口
+# -----------------------------------------------------------------------------
 @app.route('/subscribe', methods=['POST'])
 def subscribe():
     if 'username' not in session:
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
-    
-    subscription_data = request.get_json()
-    if not subscription_data:
-        return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+        return jsonify({"error": "Unauthorized"}), 401
         
+    username = session['username']
+    subscription_data = request.get_data(as_text=True)
+    
     conn = get_db_connection()
     cur = conn.cursor()
-    
-    # すでに同じ鍵が登録されているかチェックして、なければ保存
-    sub_json_str = json.dumps(subscription_data)
-    cur.execute(
-        "INSERT INTO web_push_subscriptions (username, subscription_json) VALUES (%s, %s)",
-        (session['username'], sub_json_str)
-    )
-    
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    return jsonify({'status': 'success', 'message': 'Subscribed successfully'})
+    try:
+        cur.execute('''
+            INSERT INTO subscriptions (username, subscription_json) 
+            VALUES (%s, %s) 
+            ON CONFLICT (username, subscription_json) DO NOTHING
+        ''', (username, subscription_data))
+        conn.commit()
+        return jsonify({"success": True}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
-# --------------------------------------------------
-# 🔐 管理者用の隠しページ
-# --------------------------------------------------
-@app.route('/admin-yusaku-xyz777')
+# -----------------------------------------------------------------------------
+# 👑 管理者用隠し部屋（手動テスト配信も残してあります）
+# -----------------------------------------------------------------------------
+@app.route('/admin-yusaku-xyz777', methods=['GET', 'POST'])
 def admin_page():
     conn = get_db_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=DictCursor)
     
-    cur.execute("SELECT DISTINCT username FROM tasks ORDER BY username;")
-    users = [row[0] for row in cur.fetchall()]
-    
-    opinions = []
-    try:
-        cur.execute("SELECT text, created_at FROM opinions ORDER BY id DESC;")
-        opinions = cur.fetchall()
-    except Exception:
-        conn.rollback()
+    if request.method == 'POST':
+        action = request.form.get('action')
         
-    # 🔔 通知の登録数をカウント
-    cur.execute("SELECT COUNT(*) FROM web_push_subscriptions;")
-    push_count = cur.fetchone()[0]
+        # 手動で全員に一斉テスト通知を送る処理
+        if action == 'broadcast':
+            title = request.form.get('title', '管理者からのお知らせ')
+            body = request.form.get('body', 'これはテスト通知です。')
+            
+            cur.execute('SELECT subscription_json FROM subscriptions')
+            all_subs = cur.fetchall()
+            
+            success_count = 0
+            for row in all_subs:
+                if send_webpush(row['subscription_json'], title, body):
+                    success_count += 1
+            return f"配信完了: {success_count} 件の端末に手動で送信しました。"
+            
+        # 意見箱のデータを全削除する処理
+        elif action == 'clear_suggestions':
+            cur.execute('DELETE FROM suggestions')
+            conn.commit()
+            return redirect(url_for('admin_page'))
+            
+    cur.execute('SELECT * FROM suggestions ORDER BY created_at DESC')
+    all_suggestions = cur.fetchall()
     
     cur.close()
     conn.close()
-    
-    html_content = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>管理者専用ページ</title>
-        <style>
-            body { font-family: Arial, sans-serif; background: #f4f7f6; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; }
-            h1 { color: #2c3e50; border-bottom: 2px solid #2c3e50; padding-bottom: 10px; font-size: 20px; }
-            h2 { font-size: 16px; color: #16a085; margin-top: 30px; }
-            ul { list-style: none; padding: 0; }
-            li { background: white; padding: 10px 15px; margin-bottom: 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 14px; }
-            .time { font-size: 11px; color: #7f8c8d; display: block; margin-top: 4px; }
-            .back-btn { display: inline-block; background: #7f8c8d; color: white; text-decoration: none; padding: 8px 12px; border-radius: 4px; font-size: 13px; margin-bottom: 20px; }
-            .badge { background: #e74c3c; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; }
-        </style>
-    </head>
-    <body>
-        <a href="/" class="back-btn">← アプリに戻る</a>
-        <h1>📊 優作総帥の秘密の管理部屋</h1>
-        
-        <h2>👤 これまでにログインしたユーザー名 ({% len_users %})</h2>
-        <ul>
-            REPLACE_USER_LIST
-        </ul>
-        
-        <h2>🔔 通知機能がONになっている端末数: <span class="badge">REPLACE_PUSH_COUNT</span></h2>
-        
-        <h2>📩 意見箱に届いたメッセージ ({% len_opinions %})</h2>
-        <ul>
-            REPLACE_OPINION_LIST
-        </ul>
-    </body>
-    </html>
-    """
-    
-    rendered = html_content.replace("{% len_users %}", str(len(users))).replace("{% len_opinions %}", str(len(opinions))).replace("REPLACE_PUSH_COUNT", str(push_count))
-    
-    user_list_html = ""
-    for u in users:
-        user_list_html += f"<li><strong>{u}</strong> さん</li>"
-    if not users:
-        user_list_html = '<li style="color: #999;">まだ誰も登録していません</li>'
-    rendered = rendered.replace("REPLACE_USER_LIST", user_list_html)
-    
-    opinion_list_html = ""
-    for op in opinions:
-        opinion_list_html += f"<li><div>{op[0]}</div><span class='time'>受信日時: {op[1]}</span></li>"
-    if not opinions:
-        opinion_list_html = '<li style="color: #999;">まだ意見は届いていません</li>'
-    rendered = rendered.replace("REPLACE_OPINION_LIST", opinion_list_html)
-    
-    return rendered
+    return render_template('admin.html', suggestions=all_suggestions)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    init_db()
+    # ローカル実行時はサーバーを起動（※Render上ではgunicornが使われます）
+    app.run(host='0.0.0.0', port=5000, debug=True)
