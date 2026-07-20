@@ -18,11 +18,12 @@ def get_db_connection():
     conn = psycopg2.connect(database_url, sslmode='require')
     return conn
 
-# データベースの初期化
+# データベースの初期化・修復
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
-    # ユーザーテーブル（パスワードなし・名前のみに対応）
+    
+    # ユーザーテーブルを作成（まずはパスワードなしでもOKな状態で定義）
     cur.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -30,6 +31,15 @@ def init_db():
             password TEXT
         );
     ''')
+    
+    # 💡【超重要】すでに本番DBにある「パスワード必須ルール」を解除する魔法の命令
+    try:
+        cur.execute('ALTER TABLE users ALTER COLUMN password DROP NOT NULL;')
+        conn.commit()
+    except Exception as e:
+        # すでに解除されている場合はエラーになるのでスルーする
+        conn.rollback()
+
     # タスクテーブル
     cur.execute('''
         CREATE TABLE IF NOT EXISTS tasks (
@@ -63,7 +73,7 @@ def init_db():
     cur.close()
     conn.close()
 
-# 起動時にDB初期化
+# 起動時にDB初期化とルール修復を実行
 try:
     init_db()
 except Exception as e:
@@ -130,7 +140,6 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        # 💡 パスワードを要求せず、ユーザー名（username）だけを取得する形に完全修正！
         username = request.form.get('username')
         
         if not username:
@@ -144,7 +153,7 @@ def login():
         user = cur.fetchone()
         
         if not user:
-            # 存在しない名前なら、その場で新しく登録する
+            # 存在しない名前なら、その場で新しく登録する（パスワードは自動で空っぽになる）
             cur.execute('INSERT INTO users (username) VALUES (%s)', (username,))
             conn.commit()
             
