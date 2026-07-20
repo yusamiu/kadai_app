@@ -78,8 +78,9 @@ def check_and_send_daily_reminders():
         jst = pytz.timezone('Asia/Tokyo')
         now_jst = datetime.now(jst)
         
-        # 毎日「朝8時台」かつ「今日まだこの通知処理を実行していない」場合のみ実行
-        if now_jst.hour == 8 and last_run_date != now_jst.date():
+        
+    # 8時35分になったら（かつ今日まだ送っていなければ）通知を送信！
+        if now_jst.hour == 8 and now_jst.minute >= 40 and last_run_date != now_jst.date():
             logging.info("【自動通知】日本時間 朝8時になりました。1日前リマインダー処理を開始します。")
             
             private_key = app.config.get('VAPID_PRIVATE_KEY')
@@ -209,7 +210,7 @@ def logout():
 # --- 4. ルート：メインダッシュボード（タスク一覧） ---
 @app.route('/')
 def index():
-    # 🔔 UptimeRobot等のアクセスを検知して通知判定を走らせる（無料自動化システム）
+    # 🔔 UptimeRobot等のアクセスを検知して通知判定を走らせる
     check_and_send_daily_reminders()
 
     if not is_logged_in():
@@ -220,9 +221,11 @@ def index():
     # 【Supabase取得】ログインユーザーのタスクのみを取得
     tasks = Task.query.filter_by(username=username).all()
     
-    # オブジェクトから辞書型へ変換しつつ残り日数をリアルタイム計算
+    # 🇯🇵 日本時間（JST）の「今日」を取得して正確に計算する
+    jst = pytz.timezone('Asia/Tokyo')
+    today_jst = datetime.now(jst).date()
+    
     user_tasks = []
-    today = datetime.now().date()
     for t in tasks:
         task_dict = {
             'username': t.username,
@@ -234,8 +237,10 @@ def index():
         }
         try:
             if t.deadline:
+                # 期限の日付を取り出す
                 deadline_date = datetime.strptime(t.deadline, '%Y-%m-%d').date()
-                task_dict['days_left'] = (deadline_date - today).days
+                # 日本時間の「今日」との差を計算（これで今日＝0日、明日＝1日になる！）
+                task_dict['days_left'] = (deadline_date - today_jst).days
             else:
                 task_dict['days_left'] = 999
         except Exception as e:
@@ -253,7 +258,16 @@ def add_task():
         
     text = request.form.get('task', '').strip()
     deadline = request.form.get('deadline', '').strip()
-    subject = request.form.get('subject', '').strip()
+    
+    # セレクトボックスの値と、自由入力（その他）の値を両方チェックする
+    subject_select = request.form.get('subject', '').strip()
+    subject_custom = request.form.get('subject_custom', '').strip()
+    
+    # 「その他」が選ばれていて自由入力欄に記載があればそれを優先、無ければセレクトボックスの値を使う
+    if subject_select == 'その他' and subject_custom:
+        subject = subject_custom
+    else:
+        subject = subject_select
     
     if not text or not deadline or not subject:
         flash('すべての項目を正しく入力してください。', 'error')
@@ -271,7 +285,7 @@ def add_task():
         )
         db.session.add(new_task)
         db.session.commit()
-        logging.info(f"タスク追加: {session['username']} -> {text}")
+        logging.info(f"タスク追加: {session['username']} -> {text} ({subject})")
     except Exception as e:
         db.session.rollback()
         logging.error(f"タスク追加エラー: {str(e)}")

@@ -267,15 +267,28 @@
         <input type="date" name="deadline" required>
         
         <div class="input-label">教科</div>
-        <select name="subject" required>
-            <option value="" disabled selected>教科を選択</option>
-            <option value="国語">国語</option>
-            <option value="数学">数学</option>
-            <option value="英語">英語</option>
-            <option value="理科">理科</option>
-            <option value="社会">社会</option>
-            <option value="その他">その他</option>
-        </select>
+       <select name="subject" id="subjectSelect" onchange="toggleCustomSubject()">
+  <option value="国語">国語</option>
+  <option value="数学">数学</option>
+  <option value="英語">英語</option>
+  <option value="理科">理科</option>
+  <option value="社会">社会</option>
+  <option value="その他">その他</option>
+</select>
+
+<input type="text" name="subject_custom" id="customSubjectInput" placeholder="教科名・分類を入力" style="display: none;">
+
+<script>
+function toggleCustomSubject() {
+  var select = document.getElementById('subjectSelect');
+  var customInput = document.getElementById('customSubjectInput');
+  if (select.value === 'その他') {
+    customInput.style.display = 'inline-block';
+  } else {
+    customInput.style.display = 'none';
+  }
+}
+</script>
         <button type="submit" class="add-btn">タスクを追加</button>
     </form>
 
