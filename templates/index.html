@@ -22,7 +22,7 @@
             color: #4a3e3d; 
         }
         
-        /* メインコンテナの装飾（影の色も暖色系に調整） */
+        /* メインコンテナの装飾 */
         .container { 
             max-width: 600px; 
             margin: 0 auto; 
@@ -48,7 +48,6 @@
             border-radius: 12px; 
             margin-bottom: 20px; 
             text-align: center; 
-            display: none; 
         }
         
         /* 通知有効化ボタン */
@@ -92,25 +91,26 @@
             border-radius: 12px; 
         }
         
+        /* 【重要】カレンダーの文字色が白くならないよう修正 */
         input, select, button { 
             padding: 12px; 
             font-size: 16px; 
             border: 1px solid #dcc7bd; 
             border-radius: 8px; 
-            background-color: #ffffff; 
-            color: #4a3e3d; 
+            background-color: #ffffff !important; 
+            color: #4a3e3d !important; 
         }
         
         /* 追加ボタンの暖色系設定 */
         button.add-btn { 
-            background-color: #e67e22; 
-            color: #ffffff; 
+            background-color: #e67e22 !important; 
+            color: #ffffff !important; 
             border: none; 
             font-weight: bold; 
             cursor: pointer; 
         }
         button.add-btn:hover { 
-            background-color: #d35400; 
+            background-color: #d35400 !important; 
         }
         
         /* タスクリスト表示領域 */
@@ -224,8 +224,8 @@
         }
         
         .suggest-btn { 
-            background-color: #8a7a78; 
-            color: #ffffff; 
+            background-color: #8a7a78 !important; 
+            color: #ffffff !important; 
             border: none; 
             padding: 8px 16px; 
             font-size: 14px; 
@@ -239,7 +239,7 @@
 <div class="container">
     <div id="notification-banner" class="notification-banner">
         <p style="margin: 0 0 10px 0; font-size: 14px; color: #856404; font-weight: bold;">期限切れ前にスマホに通知を受け取りますか？</p>
-        <button id="enable-notification" class="notify-btn">通知を受け取る</button>
+        <button id="enable-notification" class="notify-btn">通知を設定・有効化する</button>
     </div>
 
     <div class="user-info">
@@ -317,30 +317,23 @@
 </div>
 
 <script>
-    // 注意: 実際の配信機能にはVAPIDパブリックキーの生成と配置が必要です。現在は初期化可能なダミー値を設定しています。
+    // ⚠️ メモした「あなたの公開鍵 (HTML用)」を必ずここに貼り付けてください！
     const VAPID_PUBLIC_KEY = "BLFvsP57Nmst6JA6TS3joiz6Cnf6G1dC5mOCrEHBBsulBNcVPtKJy9zNw1SmKHA67wxLb9V3TjtAB2jJh08J8j0";
-
-    // ブラウザの互換性チェックおよびバナー初期表示制御
-    document.addEventListener("DOMContentLoaded", () => {
-        if ("Notification" in window && "serviceWorker" in window) {
-            if (Notification.permission === "default") {
-                document.getElementById("notification-banner").style.display = "block";
-            }
-        }
-    });
 
     // ユーザーインタラクションに基づく通知許可申請
     document.getElementById("enable-notification").addEventListener("click", async () => {
-        const banner = document.getElementById("notification-banner");
+        if (!("Notification" in window)) {
+            alert("このブラウザ・端末は通知に対応していません。ホーム画面から起動しているか確認してください。");
+            return;
+        }
+        
         const permission = await Notification.requestPermission();
+        alert("現在の通知権限ステータス: " + permission);
         
         if (permission === "granted") {
-            alert("通知が許可されました。");
-            banner.style.display = "none";
             configurePushSubscription();
         } else {
-            alert("通知が拒否されました。設定から変更できます。");
-            banner.style.display = "none";
+            alert("通知が拒否されているか、設定が必要です。iPhoneの「設定」＞「通知」＞「アプリ名」を確認してください。");
         }
     });
 
@@ -349,25 +342,32 @@
         if (!('serviceWorker' in navigator)) return;
         
         const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        
-        if (sub === null) {
-            try {
-                const newSub = await reg.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-                });
-                
-                await fetch("/subscribe", {
-                    method: "POST",
-                    body: JSON.stringify(newSub),
-                    headers: {
-                        "Content-Type": "application/json"
-                    }
-                });
-            } catch (error) {
-                console.error("Subscription failed:", error);
+        try {
+            // 既存の古い登録をクリーンアップ
+            const oldSub = await reg.pushManager.getSubscription();
+            if (oldSub) { await oldSub.unsubscribe(); }
+
+            const newSub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+            });
+            
+            const res = await fetch("/subscribe", {
+                method: "POST",
+                body: JSON.stringify(newSub),
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            });
+            
+            if (res.ok) {
+                alert("通知の登録に完全成功しました！テスト送信を行ってください。");
+            } else {
+                alert("サーバーへの通知鍵登録に失敗しました。");
             }
+        } catch (error) {
+            console.error("Subscription failed:", error);
+            alert("通知の登録エラーが発生しました: " + error.message);
         }
     }
 
