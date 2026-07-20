@@ -63,12 +63,11 @@ def init_db():
     cur.close()
     conn.close()
 
-# 最初のリクエストが来る前にデータベースを自動初期化する
-@app.before_request
-def initialize():
-    if not hasattr(app, '_db_initialized'):
-        init_db()
-        app._db_initialized = True
+# 💡 Render起動時（モジュール読み込み時）に安全に1度だけDBを初期化する方式に変更
+try:
+    init_db()
+except Exception as e:
+    print(f"【DB初期化エラー】起動時の接続に失敗しました: {e}")
 
 # -----------------------------------------------------------------------------
 # 🤖 自動通知システム（物理送信関数）
@@ -315,13 +314,11 @@ def cron_trigger():
     conn = None
     cur = None
     try:
-        # 明日の日付を計算
         tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
         
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=DictCursor)
         
-        # 「明日が期限」かつ「未完了(yet)」のタスクを取得
         cur.execute('''
             SELECT username, text, subject 
             FROM tasks 
@@ -335,7 +332,6 @@ def cron_trigger():
             task_title = task['text']
             subject_name = task['subject']
             
-            # ユーザーごとの購読情報を取得
             cur.execute('SELECT subscription_json FROM subscriptions WHERE username = %s', (target_user,))
             subs = cur.fetchall()
             
@@ -353,12 +349,10 @@ def cron_trigger():
         return f"エラーが発生しました: {e}", 500
 
     finally:
-        # ⚠️ 何があっても絶対にデータベースとの接続を完全に切断する（パンク防止の安全装置）
         if cur:
             cur.close()
         if conn:
             conn.close()
 
 if __name__ == '__main__':
-    init_db()
     app.run(host='0.0.0.0', port=5000, debug=True)
