@@ -3,52 +3,204 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>管理者ページ</title>
+    <title>管理者ダッシュボード</title>
     <style>
-        body { font-family: sans-serif; background: #fafafa; padding: 20px; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1, h2 { color: #8b5a42; }
-        .box { background: #fdf6f0; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #dcc7bd; }
-        input, textarea, button { width: 100%; padding: 10px; margin-top: 5px; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; }
-        button { background: #d97736; color: white; border: none; cursor: pointer; font-weight: bold; }
-        ul { list-style: none; padding: 0; }
-        li { background: #eee; padding: 10px; margin-bottom: 5px; border-radius: 4px; font-size: 14px; }
+        body { 
+            font-family: 'Helvetica Neue', Arial, sans-serif; 
+            background-color: #fff9f5; 
+            margin: 0; 
+            padding: 20px; 
+            color: #4a3e3d; 
+        }
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+            background: #ffffff; 
+            padding: 30px; 
+            border-radius: 16px; 
+            box-shadow: 0 4px 20px rgba(180, 140, 120, 0.15); 
+        }
+        h1 { 
+            font-size: 26px; 
+            color: #8b5a42; 
+            text-align: center; 
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #e67e22;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .back-link:hover { text-decoration: underline; }
+        
+        /* セクション（カードスタイル） */
+        .card { 
+            background-color: #fdf6f0; 
+            padding: 20px; 
+            border-radius: 12px; 
+            margin-bottom: 25px; 
+            border: 1px solid #dcc7bd;
+        }
+        .card h2 { 
+            font-size: 18px; 
+            color: #8b5a42; 
+            margin-top: 0; 
+            margin-bottom: 15px;
+            border-left: 4px solid #e67e22;
+            padding-left: 10px;
+        }
+        
+        /* フォーム要素 */
+        input[type="text"], textarea { 
+            width: 100%; 
+            padding: 12px; 
+            font-size: 15px; 
+            border: 1px solid #dcc7bd; 
+            border-radius: 8px; 
+            background-color: #ffffff; 
+            color: #4a3e3d; 
+            box-sizing: border-box;
+            margin-top: 5px;
+            margin-bottom: 12px;
+        }
+        button { 
+            background-color: #d97736; 
+            color: #ffffff; 
+            border: none; 
+            padding: 12px 20px; 
+            font-size: 15px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            width: 100%;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #c25f23; }
+        .btn-danger { background-color: #e74c3c; }
+        .btn-danger:hover { background-color: #c0392b; }
+
+        /* 意見箱リストのデザイン変更 */
+        .suggestion-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .suggestion-item {
+            background: #ffffff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 5px solid #d97736;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+        }
+        .suggestion-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: #8a7a78;
+            margin-bottom: 6px;
+            border-bottom: 1px dashed #f5e6de;
+            padding-bottom: 4px;
+        }
+        .suggestion-user { font-weight: bold; color: #4a3e3d; }
+        .suggestion-text { font-size: 15px; line-height: 1.5; word-break: break-all; }
+
+        /* ログイン履歴のテーブルデザイン */
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+        }
+        .history-table th, .history-table td {
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 14px;
+        }
+        .history-table th {
+            background-color: #8b5a42;
+            color: white;
+            font-weight: bold;
+        }
+        .history-table tr:nth-child(even) { background-color: #fdf6f0; }
+        .history-table tr { border-bottom: 1px solid #f5e6de; }
+        .no-data { text-align: center; color: #a1928f; padding: 20px; background: none; list-style: none;}
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>👑 管理者ページ</h1>
-    <a href="/">← アプリに戻る</a>
-    <hr>
+    <a href="/" class="back-link">← アプリに戻る</a>
+    <h1>👑 管理者ダッシュボード</h1>
 
-    <div class="box">
+    <div class="card">
         <h2>📢 全体プッシュ通知配信</h2>
         <form action="/admin-yusaku-xyz777" method="POST">
             <input type="hidden" name="action" value="broadcast">
-            <label>通知タイトル: <input type="text" name="title" value="管理者からのお知らせ"></label><br><br>
-            <label>通知本文: <textarea name="body" rows="3">これはテスト通知です。</textarea></label><br><br>
+            <label>通知タイトル</label>
+            <input type="text" name="title" value="管理者からのお知らせ" required>
+            <label>通知本文</label>
+            <textarea name="body" rows="3" required>これはテスト通知です。</textarea>
             <button type="submit">全員に通知を送信する</button>
         </form>
     </div>
 
-    <div class="box">
+    <div class="card">
         <h2>📥 届いた意見箱（要望）一覧</h2>
-        <form action="/admin-yusaku-xyz777" method="POST" style="margin-bottom: 10px;">
+        <form action="/admin-yusaku-xyz777" method="POST" style="margin-bottom: 15px;">
             <input type="hidden" name="action" value="clear_suggestions">
-            <button type="submit" style="background: #c0392b;">意見箱をすべて空にする</button>
+            <button type="submit" class="btn-danger" onclick="return confirm('本当にすべての意見を削除しますか？')">意見箱をすべて空にする</button>
         </form>
-        <ul>
+        
+        <ul class="suggestion-list">
             {% for sug in suggestions %}
-            <li>
-                <strong>{{ sug.username }}</strong> さんから：<br>
-                {{ sug.opinion }} <br>
-                <small style="color: #777;">({{ sug.created_at }})</small>
+            <li class="suggestion-item">
+                <div class="suggestion-header">
+                    <span class="suggestion-user">👤 {{ sug.username }} さん</span>
+                    <span>⏰ {{ sug.created_at }}</span>
+                </div>
+                <div class="suggestion-text">{{ sug.opinion }}</div>
             </li>
             {% else %}
-            <li style="background: none; text-align: center; color: #999;">まだ意見はありません。</li>
+            <li class="no-data">まだ意見は届いていません。</li>
             {% endfor %}
         </ul>
     </div>
+
+    <div class="card">
+        <h2>👤 最近のログイン履歴（直近50件）</h2>
+        <form action="/admin-yusaku-xyz777" method="POST" style="margin-bottom: 15px;">
+            <input type="hidden" name="action" value="clear_history">
+            <button type="submit" class="btn-danger" onclick="return confirm('本当にログイン履歴を削除しますか？')">履歴をすべてクリアする</button>
+        </form>
+
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>ユーザー名</th>
+                    <th>ログイン日時</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for hist in login_history %}
+                <tr>
+                    <td><strong>{{ hist.username }}</strong></td>
+                    <td>{{ hist.login_time }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="2" class="no-data" style="text-align: center;">ログイン履歴はありません。</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
 </div>
 </body>
+</html>
 </html>
