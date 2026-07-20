@@ -13,7 +13,6 @@
     <link rel="apple-touch-icon" href="/static/icon.png">
 
     <style>
-        /* 全体の背景と文字色を以前の暖色系に完全復元 */
         body { 
             font-family: 'Helvetica Neue', Arial, sans-serif; 
             background-color: #fff9f5; 
@@ -22,7 +21,6 @@
             color: #4a3e3d; 
         }
         
-        /* メインコンテナの装飾 */
         .container { 
             max-width: 600px; 
             margin: 0 auto; 
@@ -32,7 +30,6 @@
             box-shadow: 0 4px 20px rgba(180, 140, 120, 0.15); 
         }
         
-        /* メインタイトルのデザイン */
         h1 { 
             font-size: 24px; 
             color: #8b5a42; 
@@ -40,7 +37,6 @@
             text-align: center; 
         }
         
-        /* 通知案内バナー（視認性の高い暖色系の警告色） */
         .notification-banner { 
             background-color: #fff3cd; 
             border: 1px solid #ffeeba; 
@@ -50,7 +46,6 @@
             text-align: center; 
         }
         
-        /* 通知有効化ボタン */
         .notify-btn { 
             background-color: #d97736; 
             color: #ffffff; 
@@ -66,7 +61,6 @@
             background-color: #c25f23; 
         }
         
-        /* ユーザー情報表示領域 */
         .user-info { 
             text-align: right; 
             font-size: 14px; 
@@ -74,14 +68,12 @@
             margin-bottom: 20px; 
         }
         
-        /* ログアウトリンク */
         .logout-btn { 
             color: #c0392b; 
             text-decoration: none; 
             margin-left: 10px; 
         }
         
-        /* タスク追加入力フォーム */
         form { 
             display: grid; 
             gap: 12px; 
@@ -91,7 +83,14 @@
             border-radius: 12px; 
         }
         
-        /* 【重要】カレンダーの文字色が白くならないよう修正 */
+        .input-label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #8b5a42;
+            margin-bottom: -4px;
+            margin-top: 4px;
+        }
+        
         input, select, button { 
             padding: 12px; 
             font-size: 16px; 
@@ -99,27 +98,33 @@
             border-radius: 8px; 
             background-color: #ffffff !important; 
             color: #4a3e3d !important; 
+            width: 100%;
+            box-sizing: border-box;
+            -webkit-appearance: none; 
+        }
+
+        input[type="date"] {
+            position: relative;
+            min-height: 48px;
         }
         
-        /* 追加ボタンの暖色系設定 */
         button.add-btn { 
             background-color: #e67e22 !important; 
             color: #ffffff !important; 
             border: none; 
             font-weight: bold; 
             cursor: pointer; 
+            margin-top: 8px;
         }
         button.add-btn:hover { 
             background-color: #d35400 !important; 
         }
         
-        /* タスクリスト表示領域 */
         .task-list { 
             list-style: none; 
             padding: 0; 
         }
         
-        /* 未完了タスク（左端にオレンジのアクセントライン） */
         .task-item { 
             background-color: #ffffff; 
             padding: 16px; 
@@ -132,7 +137,6 @@
             align-items: center; 
         }
         
-        /* 完了済みタスクのグレーアウト表現 */
         .task-item.done { 
             border-left-color: #dcc7bd; 
             opacity: 0.6; 
@@ -144,12 +148,14 @@
         
         .task-info { 
             flex-grow: 1; 
+            min-width: 0; 
         }
         
         .task-text { 
             font-weight: bold; 
             font-size: 16px; 
             margin-bottom: 4px; 
+            word-break: break-all; 
         }
         
         .task-meta { 
@@ -157,7 +163,6 @@
             color: #8a7a78; 
         }
         
-        /* 教科タグの暖色系バッジ */
         .badge { 
             background-color: #faebd7; 
             color: #b86b32; 
@@ -167,16 +172,15 @@
             margin-right: 6px; 
         }
         
-        /* 警告文の赤色表記 */
         .alert-text { 
             color: #c0392b; 
             font-weight: bold; 
         }
         
-        /* 操作ボタン領域 */
         .actions { 
             display: flex; 
             gap: 8px; 
+            flex-shrink: 0; 
         }
         
         .action-btn { 
@@ -186,6 +190,7 @@
             border-radius: 6px; 
             cursor: pointer; 
             font-weight: bold; 
+            width: auto;
         }
         
         .comp-btn { 
@@ -198,7 +203,6 @@
             color: #78281f; 
         }
         
-        /* 意見箱セクション */
         .suggest-section { 
             margin-top: 4px; 
             padding-top: 20px; 
@@ -231,6 +235,7 @@
             font-size: 14px; 
             border-radius: 8px; 
             cursor: pointer; 
+            width: auto;
         }
     </style>
 </head>
@@ -250,8 +255,13 @@
     <h1>タスク管理アプリ</h1>
 
     <form action="/add" method="POST">
+        <div class="input-label">タスク内容</div>
         <input type="text" name="task" placeholder="何をする？（例: 古文の課題）" required>
+        
+        <div class="input-label">提出日（締め切り）</div>
         <input type="date" name="deadline" required>
+        
+        <div class="input-label">教科</div>
         <select name="subject" required>
             <option value="" disabled selected>教科を選択</option>
             <option value="国語">国語</option>
@@ -261,7 +271,7 @@
             <option value="社会">社会</option>
             <option value="その他">その他</option>
         </select>
-        <button type="submit" class="add-btn">＋ タスクを追加</button>
+        <button type="submit" class="add-btn">タスクを追加</button>
     </form>
 
     <ul class="task-list">
@@ -287,13 +297,13 @@
             </div>
             <div class="actions">
                 {% if task.status == 'yet' %}
-                <form action="/complete" method="POST" style="margin:0; padding:0; background:none;">
+                <form action="/complete" method="POST" style="margin:0; padding:0; background:none; display:inline;">
                     <input type="hidden" name="task_value" value="{{ task.text }}">
                     <input type="hidden" name="task_deadline" value="{{ task.deadline }}">
                     <button type="submit" class="action-btn comp-btn">完了</button>
                 </form>
                 {% endif %}
-                <form action="/delete" method="POST" style="margin:0; padding:0; background:none;">
+                <form action="/delete" method="POST" style="margin:0; padding:0; background:none; display:inline;">
                     <input type="hidden" name="task_value" value="{{ task.text }}">
                     <input type="hidden" name="task_deadline" value="{{ task.deadline }}">
                     <button type="submit" class="action-btn del-btn">削除</button>
@@ -317,10 +327,8 @@
 </div>
 
 <script>
-    // ⚠️ メモした「あなたの公開鍵 (HTML用)」を必ずここに貼り付けてください！
     const VAPID_PUBLIC_KEY = "BLFvsP57Nmst6JA6TS3joiz6Cnf6G1dC5mOCrEHBBsulBNcVPtKJy9zNw1SmKHA67wxLb9V3TjtAB2jJh08J8j0";
 
-    // ユーザーインタラクションに基づく通知許可申請
     document.getElementById("enable-notification").addEventListener("click", async () => {
         if (!("Notification" in window)) {
             alert("このブラウザ・端末は通知に対応していません。ホーム画面から起動しているか確認してください。");
@@ -337,13 +345,11 @@
         }
     });
 
-    // プッシュサブスクリプションオブジェクトの生成とサーバー送信
     async function configurePushSubscription() {
         if (!('serviceWorker' in navigator)) return;
         
         const reg = await navigator.serviceWorker.ready;
         try {
-            // 既存の古い登録をクリーンアップ
             const oldSub = await reg.pushManager.getSubscription();
             if (oldSub) { await oldSub.unsubscribe(); }
 
@@ -371,7 +377,6 @@
         }
     }
 
-    // 鍵データ変換ユーティリティ
     function urlBase64ToUint8Array(base64String) {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
         const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -383,7 +388,6 @@
         return outputArray;
     }
 
-    // サービスワーカーファイルの登録実行
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/static/service-worker.js')
         .then(reg => console.log('Service Worker Registered!', reg))
