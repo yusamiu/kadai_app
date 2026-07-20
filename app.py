@@ -3,63 +3,71 @@ import json
 import logging
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, session, jsonify, url_for, flash
+from flask_sqlalchemy import SQLAlchemy
 from pywebpush import webpush, WebPushException
 
 # ロギングの設定（エラーの追跡用）
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
 
 app = Flask(__name__)
-# セッション暗号化キー（Renderの環境変数から取得、なければ安全なデフォルト値）
+# セッション暗号化キー
 app.secret_key = os.environ.get('SECRET_KEY', 'super-secret-key-yusaku-xyz-9999-alpha')
+
+# --- 🛰️ Supabase (PostgreSQL) 設定 ---
+# Renderの環境変数から取得。ローカル用のデフォルトはSQLite
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    # SQLAlchemyの仕様変更に対応するため、postgres:// を postgresql:// に変換
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///local_fallback.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
+# --- 🗄️ データベースのテーブル（仕組み）の定義 ---
+class Task(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), nullable=False)
+    text = db.Column(db.String(500), nullable=False)
+    deadline = db.Column(db.String(50), nullable=False)
+    subject = db.Column(db.String(100), nullable=False)
+    status = db.Column(db.String(20), default='yet')
+    created_at = db.Column(db.String(50), nullable=False)
+    completed_at = db.Column(db.String(50), nullable=True)
+
+class Suggestion(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), nullable=False)
+    opinion = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.String(50), nullable=False)
+
+class LoginHistory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), nullable=False)
+    login_time = db.Column(db.String(50), nullable=False)
+    ip_address = db.Column(db.String(50), nullable=False)
+
+class Subscription(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), nullable=False)
+    endpoint = db.Column(db.Text, nullable=False, unique=True)
+    p256dh = db.Column(db.Text, nullable=False)
+    auth = db.Column(db.Text, nullable=False)
+    registered_at = db.Column(db.String(50), nullable=False)
 
 # --- WebPush設定（Renderの環境変数から取得） ---
 VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
 VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'mailto:admin@yusaku-xyz.com')
 
-# --- データ保存ファイルの定義 ---
-DATA_FILE = 'tasks.json'
-SUBS_FILE = 'subscriptions.json'
-SUGGESTIONS_FILE = 'suggestions.json'
-HISTORY_FILE = 'login_history.json'
-USER_FILE = 'users.json'  # ユーザーアカウント管理用（もしあれば）
-
-# --- データ入出力用ヘルパー関数群（バリデーション付き） ---
-def load_json_data(file_path):
-    """指定されたJSONファイルからデータを安全に読み込む関数"""
-    if not os.path.exists(file_path):
-        return []
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                return data
-            return []
-    except json.JSONDecodeError:
-        logging.error(f"JSONのパースに失敗しました: {file_path}. 空のリストを返します。")
-        return []
-    except Exception as e:
-        logging.error(f"ファイル読み込みエラー ({file_path}): {str(e)}")
-        return []
-
-def save_json_data(file_path, data):
-    """指定されたデータをJSONファイルへ安全に保存する関数"""
-    try:
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-        return True
-    except Exception as e:
-        logging.error(f"ファイル保存エラー ({file_path}): {str(e)}")
-        return False
-
-# --- 認証フィルター（デコレータ相当のチェック） ---
+# 認証フィルター
 def is_logged_in():
     return 'username' in session
 
-# --- 1. ルート：サービworkerの配信用（PWA対応） ---
+# --- 1. ルート：サービスworkerの配信用 ---
 @app.route('/service-worker.js')
 def service_worker():
-    """フロントエンドからService Workerを要求された際、正しいMIMEタイプで返却する"""
     try:
         return app.send_static_file('service-worker.js')
     except Exception as e:
@@ -73,30 +81,26 @@ def login():
         return redirect(url_for('index'))
         
     if request.method == 'POST':
-        # パスワードの取得とチェックを廃止し、ユーザー名だけを取得
         username = request.form.get('username', '').strip()
         
-        # バリデーション：名前が空欄の場合だけエラーにする
         if not username:
             flash('ユーザー名を入力してください。', 'error')
             return render_template('login.html')
             
-        # 認証処理：名前さえあれば誰でもログイン成功
         session['username'] = username
-        session.permanent = True  # セッションの永続化
+        session.permanent = True
         
-        # 【機能追加】ログイン履歴を保存するロジック
+        # 【Supabase保存】ログイン履歴
         try:
-            history = load_json_data(HISTORY_FILE)
-            new_log = {
-                'username': username,
-                'login_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'ip_address': request.remote_addr or 'Unknown'
-            }
-            history.insert(0, new_log)  # 先頭（最新）に追加
-            history = history[:100]     # 最大100件まで保持
-            save_json_data(HISTORY_FILE, history)
+            new_log = LoginHistory(
+                username=username,
+                login_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                ip_address=request.remote_addr or 'Unknown'
+            )
+            db.session.add(new_log)
+            db.session.commit()
         except Exception as e:
+            db.session.rollback()
             logging.error(f"ログイン履歴の保存中にエラー: {str(e)}")
             
         logging.info(f"ユーザーログイン成功: {username}")
@@ -108,7 +112,7 @@ def login():
 @app.route('/logout')
 def logout():
     username = session.get('username', '未知のユーザー')
-    session.clear()  # セッション情報を完全に消去
+    session.clear()
     logging.info(f"ユーザーログアウト: {username}")
     return redirect(url_for('login'))
 
@@ -119,24 +123,32 @@ def index():
         return redirect(url_for('login'))
         
     username = session['username']
-    all_tasks = load_json_data(DATA_FILE)
     
-    # 現在ログインしているユーザーのタスクのみをフィルタリング
-    user_tasks = [task for task in all_tasks if task.get('username') == username]
+    # 【Supabase取得】ログインユーザーのタスクのみを取得
+    tasks = Task.query.filter_by(username=username).all()
     
-    # 各タスクの残り日数をリアルタイム計算
+    # オブジェクトから辞書型へ変換しつつ残り日数をリアルタイム計算
+    user_tasks = []
     today = datetime.now().date()
-    for task in user_tasks:
+    for t in tasks:
+        task_dict = {
+            'username': t.username,
+            'text': t.text,
+            'deadline': t.deadline,
+            'subject': t.subject,
+            'status': t.status,
+            'created_at': t.created_at
+        }
         try:
-            deadline_str = task.get('deadline')
-            if deadline_str:
-                deadline_date = datetime.strptime(deadline_str, '%Y-%m-%d').date()
-                task['days_left'] = (deadline_date - today).days
+            if t.deadline:
+                deadline_date = datetime.strptime(t.deadline, '%Y-%m-%d').date()
+                task_dict['days_left'] = (deadline_date - today).days
             else:
-                task['days_left'] = 999
+                task_dict['days_left'] = 999
         except Exception as e:
-            logging.error(f"日付計算エラー (タスク: {task.get('text')}): {str(e)}")
-            task['days_left'] = 999
+            logging.error(f"日付計算エラー (タスク: {t.text}): {str(e)}")
+            task_dict['days_left'] = 999
+        user_tasks.append(task_dict)
             
     return render_template('index.html', username=username, tasks=user_tasks, vapid_public_key=VAPID_PUBLIC_KEY)
 
@@ -150,26 +162,28 @@ def add_task():
     deadline = request.form.get('deadline', '').strip()
     subject = request.form.get('subject', '').strip()
     
-    # バリデーション：必要な情報が揃っているか
     if not text or not deadline or not subject:
         flash('すべての項目を正しく入力してください。', 'error')
         return redirect(url_for('index'))
         
-    all_tasks = load_json_data(DATA_FILE)
+    # 【Supabase保存】新規タスク
+    try:
+        new_task = Task(
+            username=session['username'],
+            text=text,
+            deadline=deadline,
+            subject=subject,
+            status='yet',
+            created_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        )
+        db.session.add(new_task)
+        db.session.commit()
+        logging.info(f"タスク追加: {session['username']} -> {text}")
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"タスク追加エラー: {str(e)}")
+        flash('データの保存に失敗しました。', 'error')
     
-    # 新しいタスクオブジェクトを作成して保存
-    new_task = {
-        'username': session['username'],
-        'text': text,
-        'deadline': deadline,
-        'subject': subject,
-        'status': 'yet',
-        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    }
-    all_tasks.append(new_task)
-    save_json_data(DATA_FILE, all_tasks)
-    
-    logging.info(f"タスク追加: {session['username']} -> {text}")
     return redirect(url_for('index'))
 
 # --- 6. ルート：タスク完了処理 ---
@@ -182,23 +196,18 @@ def complete_task():
     task_deadline = request.form.get('task_deadline', '').strip()
     username = session['username']
     
-    all_tasks = load_json_data(DATA_FILE)
-    updated = False
+    # 【Supabase更新】対象タスクを1件取得してステータス変更
+    task = Task.query.filter_by(username=username, text=task_value, deadline=task_deadline, status='yet').first()
     
-    # 特定のタスクを探してステータスを 'done' に変更
-    for task in all_tasks:
-        if (task.get('username') == username and 
-            task.get('text') == task_value and 
-            task.get('deadline') == task_deadline and 
-            task.get('status') == 'yet'):
-            task['status'] = 'done'
-            task['completed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            updated = True
-            break
-            
-    if updated:
-        save_json_data(DATA_FILE, all_tasks)
-        logging.info(f"タスク完了: {username} -> {task_value}")
+    if task:
+        try:
+            task.status = 'done'
+            task.completed_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            db.session.commit()
+            logging.info(f"タスク完了: {username} -> {task_value}")
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"タスク完了エラー: {str(e)}")
     else:
         logging.warning(f"完了対象のタスクが見つかりません: {username} -> {task_value}")
         
@@ -214,17 +223,17 @@ def delete_task():
     task_deadline = request.form.get('task_deadline', '').strip()
     username = session['username']
     
-    all_tasks = load_json_data(DATA_FILE)
-    # 対象タスクを除外した新しいリストを作成
-    filtered_tasks = [t for t in all_tasks if not (
-        t.get('username') == username and 
-        t.get('text') == task_value and 
-        t.get('deadline') == task_deadline
-    )]
+    # 【Supabase削除】対象タスクを検索して削除
+    task = Task.query.filter_by(username=username, text=task_value, deadline=task_deadline).first()
     
-    if len(all_tasks) != len(filtered_tasks):
-        save_json_data(DATA_FILE, filtered_tasks)
-        logging.info(f"タスク削除: {username} -> {task_value}")
+    if task:
+        try:
+            db.session.delete(task)
+            db.session.commit()
+            logging.info(f"タスク削除: {username} -> {task_value}")
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"タスク削除エラー: {str(e)}")
     else:
         logging.warning(f"削除対象のタスクが見つかりません: {username} -> {task_value}")
         
@@ -240,81 +249,86 @@ def suggest():
     if not opinion:
         return redirect(url_for('index'))
         
-    suggestions = load_json_data(SUGGESTIONS_FILE)
-    new_suggestion = {
-        'username': session['username'],
-        'opinion': opinion,
-        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    }
-    suggestions.insert(0, new_suggestion)  # 最新が上にくるように保持
-    save_json_data(SUGGESTIONS_FILE, suggestions)
-    
-    logging.info(f"意見箱に投稿を受領: {session['username']} -> {opinion[:20]}...")
+    # 【Supabase保存】意見
+    try:
+        new_suggestion = Suggestion(
+            username=session['username'],
+            opinion=opinion,
+            created_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        )
+        db.session.add(new_suggestion)
+        db.session.commit()
+        logging.info(f"意見箱に投稿を受領: {session['username']} -> {opinion[:20]}...")
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"意見投稿エラー: {str(e)}")
+        
     return redirect(url_for('index'))
 
 # --- 9. ルート：WebPush通知用の購読鍵の登録・更新 ---
 @app.route('/subscribe', methods=['POST'])
 def subscribe():
-    """ブラウザ側で生成されたPushSubscriptionオブジェクトをサーバーに保存する"""
     try:
         sub_data = request.get_json()
         if not sub_data or 'endpoint' not in sub_data:
             return jsonify({"status": "error", "message": "無効な購読データ形式です。"}), 400
             
-        subs = load_json_data(SUBS_FILE)
-        
-        # エンドポイントの重複チェック（すでに登録済みの場合は上書きせずスキップ）
-        endpoints = [s.get('endpoint') for s in subs if isinstance(s, dict)]
-        if sub_data['endpoint'] not in endpoints:
-            # 誰の端末情報かを紐付けるためにユーザー名を付与しておく
-            sub_data['username'] = session.get('username', 'guest')
-            sub_data['registered_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            subs.append(sub_data)
-            save_json_data(SUBS_FILE, subs)
-            logging.info(f"新しい通知端末を登録しました。所属: {sub_data['username']}")
+        # 重複チェック
+        existing = Subscription.query.filter_by(endpoint=sub_data['endpoint']).first()
+        if not existing:
+            # 必要な鍵情報の抽出
+            keys = sub_data.get('keys', {})
+            new_sub = Subscription(
+                username=session.get('username', 'guest'),
+                endpoint=sub_data['endpoint'],
+                p256dh=keys.get('p256dh', ''),
+                auth=keys.get('auth', ''),
+                registered_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            )
+            db.session.add(new_sub)
+            db.session.commit()
+            logging.info(f"新しい通知端末を登録しました。所属: {new_sub.username}")
             
         return jsonify({"status": "success", "message": "通知登録が正常に完了しました。"})
     except Exception as e:
+        db.session.rollback()
         logging.error(f"通知登録処理中に致命的なエラー: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # --- 10. ルート：👑 管理者コントロールパネル ---
 @app.route('/admin-yusaku-xyz777', methods=['GET', 'POST'])
 def admin_page():
-    # 常に最新のデータをJSONからロード
-    suggestions = load_json_data(SUGGESTIONS_FILE)
-    login_history = load_json_data(HISTORY_FILE)
-    subscriptions_count = len(load_json_data(SUBS_FILE))
-
     if request.method == 'POST':
         action = request.form.get('action', '').strip()
         
-        # アクション①: 意見箱データの全消去
+        # 意見箱の全消去
         if action == 'clear_suggestions':
-            if os.path.exists(SUGGESTIONS_FILE):
-                try:
-                    os.remove(SUGGESTIONS_FILE)
-                    logging.info("管理者により意見箱データが完全に初期化されました。")
-                except Exception as e:
-                    logging.error(f"意見箱削除エラー: {str(e)}")
+            try:
+                Suggestion.query.delete()
+                db.session.commit()
+                logging.info("管理者により意見箱データが完全に初期化されました。")
+            except Exception as e:
+                db.session.rollback()
+                logging.error(f"意見箱削除エラー: {str(e)}")
             return redirect(url_for('admin_page'))
             
-        # アクション②: ログイン履歴データの全消去
+        # ログイン履歴の全消去
         elif action == 'clear_history':
-            if os.path.exists(HISTORY_FILE):
-                try:
-                    os.remove(HISTORY_FILE)
-                    logging.info("管理者によりログイン履歴データが完全に初期化されました。")
-                except Exception as e:
-                    logging.error(f"ログイン履歴削除エラー: {str(e)}")
+            try:
+                LoginHistory.query.delete()
+                db.session.commit()
+                logging.info("管理者によりログイン履歴データが完全に初期化されました。")
+            except Exception as e:
+                db.session.rollback()
+                logging.error(f"ログイン履歴削除エラー: {str(e)}")
             return redirect(url_for('admin_page'))
             
-        # アクション③: 登録されているすべての端末へ全体通知の一斉配信
+        # 全体通知の一斉配信
         elif action == 'broadcast':
             title = request.form.get('title', '管理者からのお知らせ').strip()
             body = request.form.get('body', 'これは全体配信テスト通知です。').strip()
             
-            subs = load_json_data(SUBS_FILE)
+            subs = Subscription.query.all()
             if not subs:
                 logging.warning("通知対象の登録端末が1件もありません。")
                 return redirect(url_for('admin_page'))
@@ -326,36 +340,55 @@ def admin_page():
                 "badge": "/static/icon.png"
             })
             
-            # 鍵が無効（期限切れなど）だった場合にリストから除外するための追跡
-            valid_subs = []
             success_count = 0
             fail_count = 0
             
             for sub in subs:
                 try:
-                    # サブスクリプション情報から内部管理用の拡張キーを削除して通知モジュールに渡す
-                    clean_sub = {k: v for k, v in sub.items() if k != 'username' and k != 'registered_at'}
-                    
+                    clean_sub = {
+                        "endpoint": sub.endpoint,
+                        "keys": {
+                            "p256dh": sub.p256dh,
+                            "auth": sub.auth
+                        }
+                    }
                     webpush(
                         subscription_info=clean_sub,
                         data=payload,
                         vapid_private_key=VAPID_PRIVATE_KEY,
                         vapid_claims={"sub": ADMIN_EMAIL}
                     )
-                    valid_subs.append(sub)  # 送信成功したサブスクリプションを保持
                     success_count += 1
                 except WebPushException as ex:
-                    # 410 Gone や 404 Not Found など、無効になった古いプッシュキーを自動検知して排除
-                    logging.warning(f"無効なプッシュ通知キーを検出・スキップします: {str(ex)}")
+                    logging.warning(f"無効なプッシュ通知キーを検出・削除します: {str(ex)}")
+                    try:
+                        db.session.delete(sub)
+                        db.session.commit()
+                    except:
+                        db.session.rollback()
                     fail_count += 1
                 except Exception as e:
                     logging.error(f"通知送信中に予期せぬ例外: {str(e)}")
-                    valid_subs.append(sub)  # 一時的なネットワークエラーを考慮し一旦残す
                     
-            # 有効なリストのみでJSONファイルを更新保存
-            save_json_data(SUBS_FILE, valid_subs)
             logging.info(f"全体通知完了。成功: {success_count}件, 自動削除された無効端末: {fail_count}件")
             return redirect(url_for('admin_page'))
+
+    # 管理者画面用のデータ取得
+    suggestions_raw = Suggestion.query.order_by(Suggestion.id.desc()).all()
+    suggestions = [{
+        'username': s.username,
+        'opinion': s.opinion,
+        'created_at': s.created_at
+    } for s in suggestions_raw]
+
+    history_raw = LoginHistory.query.order_by(LoginHistory.id.desc()).limit(100).all()
+    login_history = [{
+        'username': h.username,
+        'login_time': h.login_time,
+        'ip_address': h.ip_address
+    } for h in history_raw]
+
+    subscriptions_count = Subscription.query.count()
 
     return render_template(
         'admin.html', 
@@ -366,7 +399,8 @@ def admin_page():
 
 # --- 11. アプリケーション起動エントリーポイント ---
 if __name__ == '__main__':
-    # 開発環境と本番環境（Render）の双方に対応する環境適応型ポート設定
     port = int(os.environ.get('PORT', 5000))
-    # Render上では debug=False を推奨しますが、調整しやすいよう標準動作で設定
+    # 初回起動時にSupabase側に自動でテーブル（表）を作成する魔法のコマンド
+    with app.app_context():
+        db.create_all()
     app.run(debug=True, host='0.0.0.0', port=port)
