@@ -151,8 +151,9 @@ def is_logged_in():
     return 'username' in session
 
 
-# --- 1. ルート：サービスworkerの配信用 ---
+# --- 1. ルート：サービスworkerの配信用（両方のURLパスに対応） ---
 @app.route('/service-worker.js')
+@app.route('/static/service-worker.js')
 def service_worker():
     try:
         return app.send_static_file('service-worker.js')
