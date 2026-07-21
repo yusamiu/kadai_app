@@ -79,9 +79,9 @@ def check_and_send_daily_reminders():
         now_jst = datetime.now(jst)
         
         
-    # 8時35分になったら（かつ今日まだ送っていなければ）通知を送信！
-        if now_jst.hour == 8 and now_jst.minute >= 45 and last_run_date != now_jst.date():
-            logging.info("【自動通知】日本時間 朝8時になりました。1日前リマインダー処理を開始します。")
+    # 毎日「朝9時30分以降」かつ「今日まだ実行していない」場合のみ実行
+        if now_jst.hour == 9 and now_jst.minute >= 30 and last_run_date != now_jst.date():
+            logging.info("【自動通知】日本時間 朝9時30分になりました。1日前リマインダー処理を開始します。")
             
             private_key = app.config.get('VAPID_PRIVATE_KEY')
             if not private_key:
