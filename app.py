@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from datetime import datetime, timedelta
-import pytz  # 🔔 日本時間の計算用に新しく追加
+import pytz  # 🔔 日本時間の計算用
 from flask import Flask, render_template, request, redirect, session, jsonify, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from pywebpush import webpush, WebPushException
@@ -23,11 +23,18 @@ app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///local_fallbac
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # --- 🔔 WebPush通知用の鍵設定 ---
-app.config['VAPID_PRIVATE_KEY'] = os.environ.get('VAPID_PRIVATE_KEY')
-app.config['VAPID_PUBLIC_KEY'] = "BLFvsP57Nmst6JA6TS3joiz6Cnf6G1dC5mOCrEHBBsulBNcVPtKJy9zNw1SmKHA67wxLb9V3TjtAB2jJh08J8j0"
+# 環境変数にあればそれを優先し、なければハードコードした公開鍵を使用
+DEFAULT_VAPID_PUBLIC_KEY = "BLFvsP57Nmst6JA6TS3joiz6Cnf6G1dC5mOCrEHBBsulBNcVPtKJy9zNw1SmKHA67wxLb9V3TjtAB2jJh08J8j0"
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY') or DEFAULT_VAPID_PUBLIC_KEY
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
+ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'mailto:admin@yusaku-xyz.com')
+
+app.config['VAPID_PUBLIC_KEY'] = VAPID_PUBLIC_KEY
+app.config['VAPID_PRIVATE_KEY'] = VAPID_PRIVATE_KEY
+
 db = SQLAlchemy(app)
 
-# --- 🗄️ データベースのテーブル（仕組み）の定義 ---
+# --- 🗄️ データベースのテーブル定義 ---
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), nullable=False)
@@ -58,30 +65,21 @@ class Subscription(db.Model):
     auth = db.Column(db.Text, nullable=False)
     registered_at = db.Column(db.String(50), nullable=False)
 
-# --- WebPush設定（Renderの環境変数から取得） ---
-VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
-VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
-ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'mailto:admin@yusaku-xyz.com')
 
-# 🔔 1日に何度も通知を送らないための、実行日記録用グローバル変数
-last_run_date = None
-
+# --- 🔔 1日前リマインダー通知処理 ---
 def check_and_send_daily_reminders():
-    """
-    【デバッグログ強化版】
-    """
     try:
         jst = pytz.timezone('Asia/Tokyo')
         now_jst = datetime.now(jst)
         
         logging.info("【テスト通知】Cronエンドポイントからリマインダー処理を強制実行します！")
         
-        private_key = app.config.get('VAPID_PRIVATE_KEY')
+        private_key = VAPID_PRIVATE_KEY or app.config.get('VAPID_PRIVATE_KEY')
         if not private_key:
             logging.error("【自動通知】VAPID_PRIVATE_KEY が設定されていません。")
             return
 
-        # 明日の日付（2026-07-22）
+        # 明日の日付
         tomorrow = now_jst.date() + timedelta(days=1)
         tomorrow_str = tomorrow.strftime('%Y-%m-%d')
         
@@ -147,9 +145,11 @@ def check_and_send_daily_reminders():
     except Exception as general_e:
         logging.error(f"【自動通知】全体エラー発生: {str(general_e)}")
 
+
 # 認証フィルター
 def is_logged_in():
     return 'username' in session
+
 
 # --- 1. ルート：サービスworkerの配信用 ---
 @app.route('/service-worker.js')
@@ -159,6 +159,7 @@ def service_worker():
     except Exception as e:
         logging.error(f"Service Worker配信エラー: {str(e)}")
         return "Service Worker Not Found", 404
+
 
 # --- 2. ルート：ログイン画面 ＆ 認証処理 ---
 @app.route('/login', methods=['GET', 'POST'])
@@ -194,6 +195,7 @@ def login():
         
     return render_template('login.html')
 
+
 # --- 3. ルート：ログアウト処理 ---
 @app.route('/logout')
 def logout():
@@ -201,6 +203,7 @@ def logout():
     session.clear()
     logging.info(f"ユーザーログアウト: {username}")
     return redirect(url_for('login'))
+
 
 # --- 4. ルート：メインダッシュボード（タスク一覧） ---
 @app.route('/')
@@ -229,9 +232,7 @@ def index():
         }
         try:
             if t.deadline:
-                # 期限の日付を取り出す
                 deadline_date = datetime.strptime(t.deadline, '%Y-%m-%d').date()
-                # 日本時間の「今日」との差を計算（これで今日＝0日、明日＝1日になる！）
                 task_dict['days_left'] = (deadline_date - today_jst).days
             else:
                 task_dict['days_left'] = 999
@@ -242,6 +243,7 @@ def index():
             
     return render_template('index.html', username=username, tasks=user_tasks, vapid_public_key=VAPID_PUBLIC_KEY)
 
+
 # --- 5. ルート：新規タスク追加 ---
 @app.route('/add', methods=['POST'])
 def add_task():
@@ -251,11 +253,9 @@ def add_task():
     text = request.form.get('task', '').strip()
     deadline = request.form.get('deadline', '').strip()
     
-    # セレクトボックスの値と、自由入力（その他）の値を両方チェックする
     subject_select = request.form.get('subject', '').strip()
     subject_custom = request.form.get('subject_custom', '').strip()
     
-    # 「その他」が選ばれていて自由入力欄に記載があればそれを優先、無ければセレクトボックスの値を使う
     if subject_select == 'その他' and subject_custom:
         subject = subject_custom
     else:
@@ -265,7 +265,6 @@ def add_task():
         flash('すべての項目を正しく入力してください。', 'error')
         return redirect(url_for('index'))
         
-    # 【Supabase保存】新規タスク
     try:
         new_task = Task(
             username=session['username'],
@@ -285,6 +284,7 @@ def add_task():
     
     return redirect(url_for('index'))
 
+
 # --- 6. ルート：タスク完了処理 ---
 @app.route('/complete', methods=['POST'])
 def complete_task():
@@ -295,7 +295,6 @@ def complete_task():
     task_deadline = request.form.get('task_deadline', '').strip()
     username = session['username']
     
-    # 【Supabase更新】対象タスクを1件取得してステータス変更
     task = Task.query.filter_by(username=username, text=task_value, deadline=task_deadline, status='yet').first()
     
     if task:
@@ -312,6 +311,7 @@ def complete_task():
         
     return redirect(url_for('index'))
 
+
 # --- 7. ルート：タスク削除処理 ---
 @app.route('/delete', methods=['POST'])
 def delete_task():
@@ -322,7 +322,6 @@ def delete_task():
     task_deadline = request.form.get('task_deadline', '').strip()
     username = session['username']
     
-    # 【Supabase削除】対象タスクを検索して削除
     task = Task.query.filter_by(username=username, text=task_value, deadline=task_deadline).first()
     
     if task:
@@ -338,6 +337,7 @@ def delete_task():
         
     return redirect(url_for('index'))
 
+
 # --- 8. ルート：意見箱への投稿受領 ---
 @app.route('/suggest', methods=['POST'])
 def suggest():
@@ -348,7 +348,6 @@ def suggest():
     if not opinion:
         return redirect(url_for('index'))
         
-    # 【Supabase保存】意見
     try:
         new_suggestion = Suggestion(
             username=session['username'],
@@ -363,6 +362,7 @@ def suggest():
         logging.error(f"意見投稿エラー: {str(e)}")
         
     return redirect(url_for('index'))
+
 
 # --- 9. ルート：WebPush通知用の購読鍵の登録・更新 ---
 @app.route('/subscribe', methods=['POST'])
@@ -406,7 +406,16 @@ def subscribe():
         db.session.rollback()
         logging.error(f"通知登録処理中に致命的なエラー: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
-# --- 10. ルート：👑 管理者コントロールパネル ---
+
+
+# --- 10. ルート：UptimeRobot等のCron呼び出し用エンドポイント ---
+@app.route('/api/cron/reminders')
+def trigger_reminders():
+    check_and_send_daily_reminders()
+    return "Reminders checked!", 200
+
+
+# --- 11. ルート：👑 管理者コントロールパネル ---
 @app.route('/admin-yusaku-xyz777', methods=['GET', 'POST'])
 def admin_page():
     if request.method == 'POST':
@@ -508,15 +517,10 @@ def admin_page():
         subs_count=subscriptions_count
     )
 
-# --- 11. アプリケーション起動エントリーポイント ---
+
+# --- 12. アプリケーション起動エントリーポイント ---
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    # 初回起動時にSupabase側に自動でテーブル（表）を作成する魔法のコマンド
     with app.app_context():
         db.create_all()
     app.run(debug=True, host='0.0.0.0', port=port)
-# UptimeRobotが叩く用の通知チェックAPI（ログイン不要）
-@app.route('/api/cron/reminders')
-def trigger_reminders():
-    check_and_send_daily_reminders()
-    return "Reminders checked!", 200

@@ -345,6 +345,13 @@ function toggleCustomSubject() {
 </div>
 
 <script>
+    // Service Worker の登録処理
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/static/service-worker.js')
+        .then(reg => console.log('Service Worker Registered!', reg))
+        .catch(err => console.log('Service Worker Reg Error:', err));
+    }
+
     // 1. Python(Flask)から渡されたVAPID公衆鍵を受け取る
     const VAPID_PUBLIC_KEY = "{{ vapid_public_key }}";
 
@@ -420,24 +427,6 @@ function toggleCustomSubject() {
             console.error("Subscription failed:", error);
             alert("【エラー発生】通知の登録処理で失敗しました:\n" + error.message);
         }
-    }
-</script>
-
-    function urlBase64ToUint8Array(base64String) {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-        const rawData = window.atob(base64);
-        const outputArray = new Uint8Array(rawData.length);
-        for (let i = 0; i < rawData.length; ++i) {
-            outputArray[i] = rawData.charCodeAt(i);
-        }
-        return outputArray;
-    }
-
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/static/service-worker.js')
-        .then(reg => console.log('Service Worker Registered!', reg))
-        .catch(err => console.log('Service Worker Reg Error:', err));
     }
 </script>
 </body>
