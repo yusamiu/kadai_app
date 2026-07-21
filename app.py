@@ -68,85 +68,84 @@ last_run_date = None
 
 def check_and_send_daily_reminders():
     """
-    UptimeRobot等のアクセスをトリガーにして、
-    【テスト用】時間や日付の制限を一切無視して即時通知処理を実行する
+    【デバッグログ強化版】
     """
-    global last_run_date
-    
     try:
-        # 日本時間の現在時刻を取得
         jst = pytz.timezone('Asia/Tokyo')
         now_jst = datetime.now(jst)
         
-        # テスト用：時間チェックをスキップして常に実行する
-        if True:
-            logging.info("【テスト通知】Cronエンドポイントからリマインダー処理を強制実行します！")
+        logging.info("【テスト通知】Cronエンドポイントからリマインダー処理を強制実行します！")
+        
+        private_key = app.config.get('VAPID_PRIVATE_KEY')
+        if not private_key:
+            logging.error("【自動通知】VAPID_PRIVATE_KEY が設定されていません。")
+            return
+
+        # 明日の日付（2026-07-22）
+        tomorrow = now_jst.date() + timedelta(days=1)
+        tomorrow_str = tomorrow.strftime('%Y-%m-%d')
+        
+        logging.info(f"【デバッグ】明日({tomorrow_str})が期限の未完了タスクを探します...")
+
+        # ① 未完了タスクを検索
+        upcoming_tasks = Task.query.filter(
+            Task.deadline.like(f"{tomorrow_str}%"),
+            Task.status == 'yet'
+        ).all()
+
+        logging.info(f"【デバッグ】見つかった対象タスク数: {len(upcoming_tasks)}件")
+
+        # もし見つからない場合、今DBにあるすべての未完了タスクを出力してみる
+        if not upcoming_tasks:
+            all_yet = Task.query.filter_by(status='yet').all()
+            logging.info(f"【デバッグ】(確認用) DB内の未完了タスク全{len(all_yet)}件のデータ:")
+            for t in all_yet:
+                logging.info(f" -> タスク名: {t.text} | 期限: '{t.deadline}' | 作成者: '{t.username}'")
+            logging.info("【自動通知】1日前リマインダー送信完了。成功: 0件")
+            return
+
+        success_count = 0
+
+        # ② タスクが見つかった場合
+        for task in upcoming_tasks:
+            logging.info(f"【デバッグ】タスク「{task.text}」(作成者: '{task.username}') の通知宛先を探します...")
             
-            private_key = app.config.get('VAPID_PRIVATE_KEY')
-            if not private_key:
-                logging.error("【自動通知】VAPID_PRIVATE_KEY が設定されていないため通知をスキップします。")
-                return
-
-            # 明日の日付を計算（YYYY-MM-DD）
-            tomorrow = now_jst.date() + timedelta(days=1)
-            tomorrow_str = tomorrow.strftime('%Y-%m-%d')
-
-            # 未完了（status == 'yet'）かつ期限が明日のタスクをすべて取得
-            upcoming_tasks = Task.query.filter(
-                Task.deadline.like(f"{tomorrow_str}%"),
-                Task.status == 'yet'
-            ).all()
-
-            if not upcoming_tasks:
-                logging.info("【自動通知】明日が期限の未完了タスクはありませんでした。")
-                return
-
-            success_count = 0
-
-            # 対象タスクのユーザーごとに通知を送信
-            for task in upcoming_tasks:
-                subscriptions = Subscription.query.filter_by(username=task.username).all()
-                
-                for sub in subscriptions:
-                    subscription_info = {
-                        "endpoint": sub.endpoint,
-                        "keys": {
-                            "p256dh": sub.p256dh,
-                            "auth": sub.auth
-                        }
+            subscriptions = Subscription.query.filter_by(username=task.username).all()
+            logging.info(f"【デバッグ】ユーザー '{task.username}' の通知登録(Subscription)数: {len(subscriptions)}件")
+            
+            for sub in subscriptions:
+                subscription_info = {
+                    "endpoint": sub.endpoint,
+                    "keys": {
+                        "p256dh": sub.p256dh,
+                        "auth": sub.auth
                     }
-                    
-                    payload = json.dumps({
-                        "title": "タスクの期限が明日です！🚨",
-                        "body": f"「{task.text}」の期限が迫っています。明日中に完了させましょう！",
-                        "icon": "/static/icon.png",
-                        "badge": "/static/icon.png"
-                    })
-                    
-                    try:
-                        webpush(
-                            subscription_info=subscription_info,
-                            data=payload,
-                            vapid_private_key=private_key,
-                            vapid_claims={"sub": ADMIN_EMAIL}
-                        )
-                        success_count += 1
-                    except WebPushException as ex:
-                        logging.warning(f"【自動通知】無効なキーを検出したため削除します ({task.username}): {str(ex)}")
-                        if ex.response and ex.response.status_code in [404, 410]:
-                            try:
-                                db.session.delete(sub)
-                                db.session.commit()
-                            except Exception as db_e:
-                                db.session.rollback()
-                                logging.error(f"【自動通知】無効トークン削除エラー: {str(db_e)}")
-                    except Exception as e:
-                        logging.error(f"【自動通知】プッシュ送信中に予期せぬエラー: {str(e)}")
+                }
+                
+                payload = json.dumps({
+                    "title": "タスクの期限が明日です！🚨",
+                    "body": f"「{task.text}」の期限が迫っています。明日中に完了させましょう！",
+                    "icon": "/static/icon.png",
+                    "badge": "/static/icon.png"
+                })
+                
+                try:
+                    webpush(
+                        subscription_info=subscription_info,
+                        data=payload,
+                        vapid_private_key=private_key,
+                        vapid_claims={"sub": ADMIN_EMAIL}
+                    )
+                    success_count += 1
+                except WebPushException as ex:
+                    logging.warning(f"【自動通知】WebPush送信失敗 ({task.username}): {str(ex)}")
+                except Exception as e:
+                    logging.error(f"【自動通知】送信時エラー: {str(e)}")
 
-            logging.info(f"【自動通知】1日前リマインダー送信完了。成功: {success_count}件")
-            
+        logging.info(f"【自動通知】1日前リマインダー送信完了。成功: {success_count}件")
+        
     except Exception as general_e:
-        logging.error(f"【自動通知】定期リマインダーシステム全体でエラー発生: {str(general_e)}")
+        logging.error(f"【自動通知】全体エラー発生: {str(general_e)}")
 
 # 認証フィルター
 def is_logged_in():
