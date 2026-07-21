@@ -345,38 +345,63 @@ function toggleCustomSubject() {
 </div>
 
 <script>
-    // ⚠️ ここをご自身の正しいVAPID_PUBLIC_KEYに必ず書き換えてください！
-    const VAPID_PUBLIC_KEY = "BLFvsP57Nmst6JA6TS3joiz6Cnf6G1dC5mOCrEHBBsulBNcVPtKJy9zNw1SmKHA67wxLb9V3TjtAB2jJh08J8j0";
+    // 1. Python(Flask)から渡されたVAPID公衆鍵を受け取る
+    const VAPID_PUBLIC_KEY = "{{ vapid_public_key }}";
 
+    // 2. Base64文字列をUint8Arrayに変換する必須関数
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding)
+            .replace(/\-/g, '+')
+            .replace(/_/g, '/');
+
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    }
+
+    // ボタンクリック時の処理
     document.getElementById("enable-notification").addEventListener("click", async () => {
         if (!("Notification" in window)) {
-            alert("このブラウザ・端末は通知に対応していません。ホーム画面から起動しているか確認してください。");
+            alert("このブラウザ・端末は通知に対応していません。ホーム画面（PWA）から起動しているか確認してください。");
             return;
         }
         
         const permission = await Notification.requestPermission();
-        alert("現在の通知権限ステータス: " + permission);
         
         if (permission === "granted") {
             configurePushSubscription();
         } else {
-            alert("通知が拒否されているか、設定が必要です。iPhoneの「設定」＞「通知」＞「アプリ名」を確認してください。");
+            alert("通知が拒否されています。iPhoneの「設定」＞「通知」＞「（アプリ名）」から許可してください。");
         }
     });
 
     async function configurePushSubscription() {
-        if (!('serviceWorker' in navigator)) return;
+        if (!('serviceWorker' in navigator)) {
+            alert("ServiceWorkerに未対応です");
+            return;
+        }
         
-        const reg = await navigator.serviceWorker.ready;
         try {
+            const reg = await navigator.serviceWorker.ready;
+            
+            // 既存の古い登録があれば解除
             const oldSub = await reg.pushManager.getSubscription();
-            if (oldSub) { await oldSub.unsubscribe(); }
+            if (oldSub) { 
+                await oldSub.unsubscribe(); 
+            }
 
+            // VAPIDキーを使って新規登録
             const newSub = await reg.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
             });
             
+            // サーバー(/subscribe)へ送信
             const res = await fetch("/subscribe", {
                 method: "POST",
                 body: JSON.stringify(newSub),
@@ -386,15 +411,17 @@ function toggleCustomSubject() {
             });
             
             if (res.ok) {
-                alert("通知の登録に完全成功しました！テスト送信を行ってください。");
+                alert("🎉 通知の登録に完全成功しました！これで準備完了です！");
             } else {
-                alert("サーバーへの通知鍵登録に失敗しました。");
+                const errData = await res.json().catch(() => ({}));
+                alert("サーバーへの通知鍵登録に失敗しました。Status: " + res.status);
             }
         } catch (error) {
             console.error("Subscription failed:", error);
-            alert("通知の登録エラーが発生しました: " + error.message);
+            alert("【エラー発生】通知の登録処理で失敗しました:\n" + error.message);
         }
     }
+</script>
 
     function urlBase64ToUint8Array(base64String) {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);

@@ -372,28 +372,40 @@ def subscribe():
         if not sub_data or 'endpoint' not in sub_data:
             return jsonify({"status": "error", "message": "無効な購読データ形式です。"}), 400
             
-        # 重複チェック
-        existing = Subscription.query.filter_by(endpoint=sub_data['endpoint']).first()
+        current_user = session.get('username', 'guest')
+        endpoint = sub_data['endpoint']
+        keys = sub_data.get('keys', {})
+        p256dh = keys.get('p256dh', '')
+        auth = keys.get('auth', '')
+
+        # 既存登録の確認
+        existing = Subscription.query.filter_by(endpoint=endpoint).first()
         if not existing:
-            # 必要な鍵情報の抽出
-            keys = sub_data.get('keys', {})
+            # 新規登録
             new_sub = Subscription(
-                username=session.get('username', 'guest'),
-                endpoint=sub_data['endpoint'],
-                p256dh=keys.get('p256dh', ''),
-                auth=keys.get('auth', ''),
+                username=current_user,
+                endpoint=endpoint,
+                p256dh=p256dh,
+                auth=auth,
                 registered_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             )
             db.session.add(new_sub)
-            db.session.commit()
-            logging.info(f"新しい通知端末を登録しました。所属: {new_sub.username}")
-            
+            logging.info(f"新規通知端末を登録しました: ユーザー={current_user}")
+        else:
+            # 既存端末の情報更新（ユーザー変更や鍵の再生成に対応）
+            existing.username = current_user
+            existing.p256dh = p256dh
+            existing.auth = auth
+            existing.registered_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            logging.info(f"既存通知端末を更新しました: ユーザー={current_user}")
+
+        db.session.commit()
         return jsonify({"status": "success", "message": "通知登録が正常に完了しました。"})
+
     except Exception as e:
         db.session.rollback()
         logging.error(f"通知登録処理中に致命的なエラー: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
-
 # --- 10. ルート：👑 管理者コントロールパネル ---
 @app.route('/admin-yusaku-xyz777', methods=['GET', 'POST'])
 def admin_page():
