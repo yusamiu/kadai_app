@@ -206,9 +206,6 @@ def logout():
 # --- 4. ルート：メインダッシュボード（タスク一覧） ---
 @app.route('/')
 def index():
-    # 🔔 UptimeRobot等のアクセスを検知して通知判定を走らせる
-    check_and_send_daily_reminders()
-
     if not is_logged_in():
         return redirect(url_for('login'))
         
