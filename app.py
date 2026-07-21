@@ -69,7 +69,7 @@ last_run_date = None
 def check_and_send_daily_reminders():
     """
     UptimeRobot等のアクセスをトリガーにして、
-    日本時間（JST）の朝8時台に1日1回だけ未完了タスクの1日前通知を送信する
+    【テスト用】時間や日付の制限を一切無視して即時通知処理を実行する
     """
     global last_run_date
     
@@ -78,10 +78,9 @@ def check_and_send_daily_reminders():
         jst = pytz.timezone('Asia/Tokyo')
         now_jst = datetime.now(jst)
         
-        
-    # 10時20分以降（かつ今日まだ送っていなければ）通知を送信！
-        if now_jst.hour == 10 and now_jst.minute >= 30 and last_run_date != now_jst.date():
-            logging.info("【自動通知】日本時間 10時30分になりました。1日前リマインダー処理を開始します。")
+        # テスト用：時間チェックをスキップして常に実行する
+        if True:
+            logging.info("【テスト通知】Cronエンドポイントからリマインダー処理を強制実行します！")
             
             private_key = app.config.get('VAPID_PRIVATE_KEY')
             if not private_key:
@@ -100,7 +99,6 @@ def check_and_send_daily_reminders():
 
             if not upcoming_tasks:
                 logging.info("【自動通知】明日が期限の未完了タスクはありませんでした。")
-                last_run_date = now_jst.date()  # タスクがなくても今日の処理は完了とする
                 return
 
             success_count = 0
@@ -146,8 +144,6 @@ def check_and_send_daily_reminders():
                         logging.error(f"【自動通知】プッシュ送信中に予期せぬエラー: {str(e)}")
 
             logging.info(f"【自動通知】1日前リマインダー送信完了。成功: {success_count}件")
-            # 実行完了日を記録して、今日これ以上重複して送られないようにする
-            last_run_date = now_jst.date()
             
     except Exception as general_e:
         logging.error(f"【自動通知】定期リマインダーシステム全体でエラー発生: {str(general_e)}")
