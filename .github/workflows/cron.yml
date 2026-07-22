@@ -1,0 +1,15 @@
+name: Daily Reminder Cron
+
+on:
+  schedule:
+    # JST(日本時間) 朝8:00 ＝ UTC時間 前日23:00
+    - cron: '0 23 * * *'
+  workflow_dispatch: # GitHubの画面から手動でテスト実行できるようにする設定
+
+jobs:
+  trigger-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Reminders API
+        run: |
+          curl -s https://yusaku-app-2026719.onrender.com/api/cron/reminders
