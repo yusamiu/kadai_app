@@ -245,7 +245,8 @@
     </style>
 </head>
 <button onclick="subscribeUser()">🔔 通知を有効にする</button>
-
+<button onclick="alert('テスト成功！')">テストボタン</button>
+<button onclick="subscribeUser()">🔔 通知を有効にする</button>
     <div class="user-info">
         ユーザー: <strong>{{ username }}</strong> さんとしてログイン中
         <a href="/logout" class="logout-btn">ログアウト</a>
@@ -273,116 +274,40 @@
 <input type="text" name="subject_custom" id="customSubjectInput" placeholder="教科名・分類を入力" style="display: none;">
 
 <script>
-function toggleCustomSubject() {
-  var select = document.getElementById('subjectSelect');
-  var customInput = document.getElementById('customSubjectInput');
-  if (select.value === 'その他') {
-    customInput.style.display = 'inline-block';
-  } else {
-    customInput.style.display = 'none';
-  }
-}
-</script>
-        <button type="submit" class="add-btn">タスクを追加</button>
-    </form>
-
-    <ul class="task-list">
-        {% for task in tasks %}
-        <li class="task-item {% if task.status == 'done' %}done{% endif %}">
-            <div class="task-info">
-                <div class="task-text">{{ task.text }}</div>
-                <div class="task-meta">
-                    <span class="badge">{{ task.subject }}</span>
-                    期限: {{ task.deadline }} 
-                    {% if task.status == 'yet' %}
-                        {% if task.days_left == 0 %}
-                            <span class="alert-text">(今日が期限です)</span>
-                        {% elif task.days_left == 1 %}
-                            <span class="alert-text">(明日が期限です)</span>
-                        {% elif task.days_left > 1 %}
-                            <span>(あと {{ task.days_left }} 日)</span>
-                        {% else %}
-                            <span class="alert-text">(期限を過ぎています)</span>
-                        {% endif %}
-                    {% endif %}
-                </div>
-            </div>
-            <div class="actions">
-                {% if task.status == 'yet' %}
-                <form action="/complete" method="POST" style="margin:0; padding:0; background:none; display:inline;">
-                    <input type="hidden" name="task_value" value="{{ task.text }}">
-                    <input type="hidden" name="task_deadline" value="{{ task.deadline }}">
-                    <button type="submit" class="action-btn comp-btn">完了</button>
-                </form>
-                {% endif %}
-                <form action="/delete" method="POST" style="margin:0; padding:0; background:none; display:inline;">
-                    <input type="hidden" name="task_value" value="{{ task.text }}">
-                    <input type="hidden" name="task_deadline" value="{{ task.deadline }}">
-                    <button type="submit" class="action-btn del-btn">削除</button>
-                </form>
-            </div>
-        </li>
-        {% else %}
-        <li style="text-align: center; color: #a1928f; padding: 20px;">タスクはすべて完了しています。</li>
-        {% endfor %}
-    </ul>
-
-    <div class="suggest-section">
-        <div class="suggest-title">アプリへの要望・意見箱（管理者に届きます）</div>
-        <form action="/suggest" method="POST" style="margin:0; padding:0; background:none; display:block;">
-            <div class="suggest-box">
-                <input type="text" name="opinion" class="suggest-input" placeholder="ここが使いにくい、こんな機能がほしいなど" required>
-                <button type="submit" class="suggest-btn">送信</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<script>
-// VAPID公開鍵（送っていただいた鍵をセット済み）
-const VAPID_PUBLIC_KEY = "BLFvsP57Nmst6JA6TS3joiz6Cnf6G1dC5mOCrEHBBsulBNcVPtKJy9zNw1SmKHA67wxLb9V3TjtAB2jJh08J8j0";
-
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
-
 async function subscribeUser() {
   try {
-    // 1. 通知許可の確認
+    alert('①開始');
     const permission = await Notification.requestPermission();
+    alert('②許可結果: ' + permission);
+    
     if (permission !== 'granted') {
-      alert('通知の許可が拒否されています。iPhoneの設定から許可してください。');
+      alert('通知の許可が拒否されています。');
       return;
     }
 
-    // 2. Service Workerの読み込み
     const registration = await navigator.serviceWorker.register('/static/service-worker.js');
+    alert('③SW登録完了');
+    
     await navigator.serviceWorker.ready;
+    alert('④SW準備完了');
 
-    // 3. 既存の購読があれば取得、なければ新規作成（★許可済みでも強制取得）
     let subscription = await registration.pushManager.getSubscription();
+    alert('⑤既存購読チェック完了: ' + (subscription ? 'あり' : 'なし'));
+    
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
       });
+      alert('⑥新規購読完了');
     }
 
-    // 4. 強制的にSupabase(/subscribe)へ送信
     const response = await fetch('/subscribe', {
       method: 'POST',
       body: JSON.stringify(subscription),
-      headers: {
-        'Content-Type': 'application/json'
-      }
+      headers: { 'Content-Type': 'application/json' }
     });
+    alert('⑦サーバー送信完了: ' + response.status);
 
     if (response.ok) {
       alert('🎉 通知端末の登録に成功しました！');
@@ -391,7 +316,7 @@ async function subscribeUser() {
       alert('サーバー登録失敗: ' + errText);
     }
   } catch (error) {
-    alert('エラーが発生しました: ' + error.message);
+    alert('エラー発生: ' + error.message);
   }
 }
 </script>
