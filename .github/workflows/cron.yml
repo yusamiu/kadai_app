@@ -2,9 +2,9 @@ name: Daily Reminder Cron
 
 on:
   schedule:
-    # JST(日本時間) 朝8:00 ＝ UTC時間 前日23:00
+    # 日本時間の朝8:00（＝UTC 前日23:00）
     - cron: '0 23 * * *'
-  workflow_dispatch: # GitHubの画面から手動でテスト実行できるようにする設定
+  workflow_dispatch:
 
 jobs:
   trigger-cron:
