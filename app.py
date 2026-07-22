@@ -67,6 +67,7 @@ class Subscription(db.Model):
 
 
 # --- 🔔 1日前リマインダー通知処理 ---
+# --- 🔔 1日前リマインダー通知処理 ---
 def check_and_send_daily_reminders():
     try:
         jst = pytz.timezone('Asia/Tokyo')
@@ -121,8 +122,8 @@ def check_and_send_daily_reminders():
                 }
                 
                 payload = json.dumps({
-                    "title": "タスクの期限が明日です！🚨",
-                    "body": f"「{task.text}」の期限が迫っています。明日中に完了させましょう！",
+                    "title": "未完了のタスクがあります！🚨",
+                    "body": f"「{task.text}」の期限は明日です！確認して完了させましょう。",
                     "icon": "/static/icon.png",
                     "badge": "/static/icon.png"
                 })
@@ -144,8 +145,7 @@ def check_and_send_daily_reminders():
         
     except Exception as general_e:
         logging.error(f"【自動通知】全体エラー発生: {str(general_e)}")
-
-
+        
 # 認証フィルター
 def is_logged_in():
     return 'username' in session
