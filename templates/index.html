@@ -282,24 +282,29 @@
 
     <ul class="task-list">
         {% for task in tasks %}
-        <li class="task-item {% if task.is_done %}done{% endif %}">
+        <li class="task-item {% if task.status == 'done' %}done{% endif %}">
             <div class="task-info">
-                <div class="task-text">{{ task.title }}</div>
+                <div class="task-text">{{ task.text }}</div>
                 <div class="task-meta">
                     <span class="badge">{{ task.subject }}</span>
                     期限: {{ task.deadline }}
-                    {% if task.is_due_tomorrow and not task.is_done %}
+                    {% if task.days_left == 1 and task.status != 'done' %}
                         <span class="alert-text">(明日が期限です)</span>
                     {% endif %}
                 </div>
             </div>
             <div class="actions">
-                <form action="/toggle/{{ task.id }}" method="POST" style="display:inline; padding:0; background:none; margin:0;">
-                    <button type="submit" class="action-btn comp-btn">
-                        {% if task.is_done %}未完了に戻す{% else %}完了{% endif %}
-                    </button>
+                {% if task.status != 'done' %}
+                <form action="/complete" method="POST" style="display:inline; padding:0; background:none; margin:0;">
+                    <input type="hidden" name="task_value" value="{{ task.text }}">
+                    <input type="hidden" name="task_deadline" value="{{ task.deadline }}">
+                    <button type="submit" class="action-btn comp-btn">完了</button>
                 </form>
-                <form action="/delete_task/{{ task.id }}" method="POST" style="display:inline; padding:0; background:none; margin:0;">
+                {% endif %}
+
+                <form action="/delete" method="POST" style="display:inline; padding:0; background:none; margin:0;">
+                    <input type="hidden" name="task_value" value="{{ task.text }}">
+                    <input type="hidden" name="task_deadline" value="{{ task.deadline }}">
                     <button type="submit" class="action-btn del-btn">削除</button>
                 </form>
             </div>
@@ -312,7 +317,7 @@
     <div class="suggest-section">
         <div class="suggest-title">アプリへの要望・意見箱（管理者に届きます）</div>
         <form action="/suggest" method="POST" class="suggest-box" style="padding:0; background:none; margin:0;">
-            <input type="text" name="suggestion" class="suggest-input" placeholder="ここが使いにくい、こんな機能がほしい..." required>
+            <input type="text" name="opinion" class="suggest-input" placeholder="ここが使いにくい、こんな機能がほしい..." required>
             <button type="submit" class="suggest-btn">送信</button>
         </form>
     </div>
@@ -333,8 +338,8 @@ function toggleCustomSubject() {
     }
 }
 
-// 通知処理（元のコードをそのまま保持）
-const VAPID_PUBLIC_KEY = "BLFvsP57Nmst6JA6TS3joiz6Cnf6G1dC5mOCrEHBBsulBNcVPtKJy9zNw1SmKHA67wxLb9V3TjtAB2jJh08J8j0";
+// 通知処理
+const VAPID_PUBLIC_KEY = "{{ vapid_public_key }}";
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
