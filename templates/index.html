@@ -294,12 +294,12 @@
                 </div>
             </div>
             <div class="actions">
-                <form action="/complete/{{ task.id }}" method="POST" style="display:inline; padding:0; background:none; margin:0;">
+                <form action="/toggle/{{ task.id }}" method="POST" style="display:inline; padding:0; background:none; margin:0;">
                     <button type="submit" class="action-btn comp-btn">
                         {% if task.is_done %}未完了に戻す{% else %}完了{% endif %}
                     </button>
                 </form>
-                <form action="/delete/{{ task.id }}" method="POST" style="display:inline; padding:0; background:none; margin:0;">
+                <form action="/delete_task/{{ task.id }}" method="POST" style="display:inline; padding:0; background:none; margin:0;">
                     <button type="submit" class="action-btn del-btn">削除</button>
                 </form>
             </div>
@@ -311,8 +311,8 @@
 
     <div class="suggest-section">
         <div class="suggest-title">アプリへの要望・意見箱（管理者に届きます）</div>
-        <form action="/feedback" method="POST" class="suggest-box" style="padding:0; background:none; margin:0;">
-            <input type="text" name="feedback" class="suggest-input" placeholder="ここが使いにくい、こんな機能がほしい..." required>
+        <form action="/suggest" method="POST" class="suggest-box" style="padding:0; background:none; margin:0;">
+            <input type="text" name="suggestion" class="suggest-input" placeholder="ここが使いにくい、こんな機能がほしい..." required>
             <button type="submit" class="suggest-btn">送信</button>
         </form>
     </div>
