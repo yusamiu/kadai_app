@@ -103,13 +103,12 @@
             -webkit-appearance: none; 
         }
 
-        /* 【改善点】iOS等でカレンダー機能を壊さないための明示的なリセット */
         input[type="date"] {
             position: relative;
             min-height: 48px;
             background-color: #ffffff !important;
             color: #4a3e3d !important;
-            -webkit-appearance: date-picker-field !important; /* 標準のカレンダー表示を強制 */
+            -webkit-appearance: date-picker-field !important; 
             appearance: date-picker-field !important;
         }
         
@@ -209,7 +208,7 @@
         }
         
         .suggest-section { 
-            margin-top: 4px; 
+            margin-top: 20px; 
             padding-top: 20px; 
             border-top: 1px dashed #dcc7bd; 
         }
@@ -244,8 +243,13 @@
         }
     </style>
 </head>
-<button onclick="subscribeUser()">🔔 通知を有効にする</button>
-<button onclick="alert('テスト成功！')">テストボタン</button>
+<body>
+<div class="container">
+
+    <div class="notification-banner">
+        <button class="notify-btn" onclick="subscribeUser()">🔔 通知を有効にする</button>
+        <button class="notify-btn" style="background-color: #8a7a78; margin-left: 5px;" onclick="alert('テスト成功！')">テストボタン</button>
+    </div>
 
     <div class="user-info">
         ユーザー: <strong>{{ username }}</strong> さんとしてログイン中
@@ -262,18 +266,74 @@
         <input type="date" name="deadline" required>
         
         <div class="input-label">教科</div>
-       <select name="subject" id="subjectSelect" onchange="toggleCustomSubject()">
-  <option value="国語">国語</option>
-  <option value="数学">数学</option>
-  <option value="英語">英語</option>
-  <option value="理科">理科</option>
-  <option value="社会">社会</option>
-  <option value="その他">その他</option>
-</select>
+        <select name="subject" id="subjectSelect" onchange="toggleCustomSubject()">
+            <option value="国語">国語</option>
+            <option value="数学">数学</option>
+            <option value="英語">英語</option>
+            <option value="理科">理科</option>
+            <option value="社会">社会</option>
+            <option value="その他">その他</option>
+        </select>
 
-<input type="text" name="subject_custom" id="customSubjectInput" placeholder="教科名・分類を入力" style="display: none;">
+        <input type="text" name="subject_custom" id="customSubjectInput" placeholder="教科名・分類を入力" style="display: none; margin-top: 8px;">
+
+        <button type="submit" class="add-btn">タスクを追加</button>
+    </form>
+
+    <ul class="task-list">
+        {% for task in tasks %}
+        <li class="task-item {% if task.is_done %}done{% endif %}">
+            <div class="task-info">
+                <div class="task-text">{{ task.title }}</div>
+                <div class="task-meta">
+                    <span class="badge">{{ task.subject }}</span>
+                    期限: {{ task.deadline }}
+                    {% if task.is_due_tomorrow and not task.is_done %}
+                        <span class="alert-text">(明日が期限です)</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="actions">
+                <form action="/complete/{{ task.id }}" method="POST" style="display:inline; padding:0; background:none; margin:0;">
+                    <button type="submit" class="action-btn comp-btn">
+                        {% if task.is_done %}未完了に戻す{% else %}完了{% endif %}
+                    </button>
+                </form>
+                <form action="/delete/{{ task.id }}" method="POST" style="display:inline; padding:0; background:none; margin:0;">
+                    <button type="submit" class="action-btn del-btn">削除</button>
+                </form>
+            </div>
+        </li>
+        {% else %}
+        <p style="text-align: center; color: #8a7a78;">現在タスクはありません 🎉</p>
+        {% endfor %}
+    </ul>
+
+    <div class="suggest-section">
+        <div class="suggest-title">アプリへの要望・意見箱（管理者に届きます）</div>
+        <form action="/feedback" method="POST" class="suggest-box" style="padding:0; background:none; margin:0;">
+            <input type="text" name="feedback" class="suggest-input" placeholder="ここが使いにくい、こんな機能がほしい..." required>
+            <button type="submit" class="suggest-btn">送信</button>
+        </form>
+    </div>
+
+</div>
 
 <script>
+// 「その他」選択時に自由入力欄を表示する処理
+function toggleCustomSubject() {
+    const select = document.getElementById('subjectSelect');
+    const customInput = document.getElementById('customSubjectInput');
+    if (select.value === 'その他') {
+        customInput.style.display = 'block';
+        customInput.required = true;
+    } else {
+        customInput.style.display = 'none';
+        customInput.required = false;
+    }
+}
+
+// 通知処理（元のコードをそのまま保持）
 const VAPID_PUBLIC_KEY = "BLFvsP57Nmst6JA6TS3joiz6Cnf6G1dC5mOCrEHBBsulBNcVPtKJy9zNw1SmKHA67wxLb9V3TjtAB2jJh08J8j0";
 
 function urlBase64ToUint8Array(base64String) {
